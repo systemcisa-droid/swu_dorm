@@ -9,6 +9,8 @@ class AlarmModel {
   final Set<int> repeatDays; // DateTime.weekday 기준 1=월 ... 7=일, 비어있으면 1회성
   final bool qrDismissEnabled;
   final String? qrCode; // 알람을 끄기 위해 스캔해야 하는 QR 코드 내용
+  final bool shakeDismissEnabled; // 알람을 끄기 위해 휴대폰을 흔들어야 하는지
+  final int shakeTargetCount; // 흔들기 미션 성공에 필요한 횟수(10/15/20 중 선택)
   final bool soundEnabled;
   final String soundId; // kAlarmSoundOptions 중 하나(soundUri가 없을 때 쓰인다)
   final String? soundUri; // 안드로이드 기기 알람음(RingtoneManager)을 골랐을 때의 content URI
@@ -31,6 +33,8 @@ class AlarmModel {
     required this.repeatDays,
     this.qrDismissEnabled = false,
     this.qrCode,
+    this.shakeDismissEnabled = false,
+    this.shakeTargetCount = 15,
     this.soundEnabled = true,
     this.soundId = kDefaultAlarmSoundId,
     this.soundUri,
@@ -50,6 +54,8 @@ class AlarmModel {
     Set<int>? repeatDays,
     bool? qrDismissEnabled,
     String? qrCode,
+    bool? shakeDismissEnabled,
+    int? shakeTargetCount,
     bool? soundEnabled,
     String? soundId,
     String? soundUri,
@@ -70,6 +76,8 @@ class AlarmModel {
       repeatDays: repeatDays ?? this.repeatDays,
       qrDismissEnabled: qrDismissEnabled ?? this.qrDismissEnabled,
       qrCode: qrCode ?? this.qrCode,
+      shakeDismissEnabled: shakeDismissEnabled ?? this.shakeDismissEnabled,
+      shakeTargetCount: shakeTargetCount ?? this.shakeTargetCount,
       soundEnabled: soundEnabled ?? this.soundEnabled,
       soundId: soundId ?? this.soundId,
       soundUri: clearSoundUri ? null : (soundUri ?? this.soundUri),
@@ -91,6 +99,8 @@ class AlarmModel {
     'repeatDays': repeatDays.toList(),
     'qrDismissEnabled': qrDismissEnabled,
     'qrCode': qrCode,
+    'shakeDismissEnabled': shakeDismissEnabled,
+    'shakeTargetCount': shakeTargetCount,
     'soundEnabled': soundEnabled,
     'soundId': soundId,
     'soundUri': soundUri,
@@ -113,6 +123,8 @@ class AlarmModel {
         .toSet(),
     qrDismissEnabled: json['qrDismissEnabled'] as bool? ?? false,
     qrCode: json['qrCode'] as String?,
+    shakeDismissEnabled: json['shakeDismissEnabled'] as bool? ?? false,
+    shakeTargetCount: json['shakeTargetCount'] as int? ?? 15,
     soundEnabled: json['soundEnabled'] as bool? ?? true,
     soundId: json['soundId'] as String? ?? kDefaultAlarmSoundId,
     soundUri: json['soundUri'] as String?,

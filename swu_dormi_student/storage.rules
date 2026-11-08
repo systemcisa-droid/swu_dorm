@@ -139,6 +139,14 @@ service firebase.storage {
                       isUnder20MB();
     }
 
+    // 나눔방 채팅 첨부 사진/영상 (업로드 전 앱에서 압축됨)
+    match /share_rooms/{roomId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() &&
+                      (isImage() || isVideo()) &&
+                      isUnder20MB();
+    }
+
     // 기본적으로 모든 접근 차단
     match /{allPaths=**} {
       allow read, write: if false;

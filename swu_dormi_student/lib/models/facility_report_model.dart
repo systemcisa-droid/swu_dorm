@@ -15,6 +15,10 @@ class FacilityReportModel {
   final String status; // 'pending', 'in_progress', 'completed'
   final DateTime? completedAt;
   final String? technicianNote;
+  // 학생이 직접 처리하고 "자체 처리" 버튼으로 완료 표시한 경우 true.
+  // 관리자가 처리한 completed와 구분하기 위한 값이다.
+  final bool selfResolved;
+  final String? selfResolvedNote;
 
   FacilityReportModel({
     required this.id,
@@ -31,6 +35,8 @@ class FacilityReportModel {
     this.status = 'pending',
     this.completedAt,
     this.technicianNote,
+    this.selfResolved = false,
+    this.selfResolvedNote,
   });
 
   Map<String, dynamic> toMap() {
@@ -49,6 +55,8 @@ class FacilityReportModel {
       'status': status,
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'technicianNote': technicianNote,
+      'selfResolved': selfResolved,
+      'selfResolvedNote': selfResolvedNote,
     };
   }
 
@@ -87,6 +95,8 @@ class FacilityReportModel {
       status: map['status'] ?? 'pending',
       completedAt: parseDateTime(map['completedAt']),
       technicianNote: map['technicianNote'],
+      selfResolved: map['selfResolved'] ?? false,
+      selfResolvedNote: map['selfResolvedNote'],
     );
   }
 }

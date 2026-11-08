@@ -45,7 +45,7 @@ class HomeStrings {
   String get menuMoveOutCheck => _t('퇴사 확인', 'Move-out Confirmation');
   String get menuAttendance => _t('인원점검(화재대피훈련)', 'Attendance Check(Fire Evacuation Drill)');
   String get menuReservation => _t('예약', 'Reservation');
-  String get menuAlarm => _t('미션알람', 'Mission Alarm');
+  String get menuAlarm => _t('수업알람', 'Class Alarm');
   String get menuFloorChat =>
       _t('층장단톡(청검|인검 문의)', 'Floor Captain Chat (Cleaning/Attendance)');
   String get floorChatTooltip => _t('층장단톡방', 'Floor Captain Chat');
@@ -64,6 +64,7 @@ class HomeStrings {
   String get menuCouncilNotices => _t('공지', 'Notices');
   String get menuCouncilCampaigns => _t('캠페인', 'Campaigns');
   String get menuCouncilElections => _t('선거', 'Elections');
+  String get menuCouncilMinutes => _t('회의록', 'Minutes');
   String get menuRewardPenalty => _t('상벌점', 'Reward/Penalty Points');
   String get menuLanguage => _t('언어', 'Language');
 }

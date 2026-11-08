@@ -1,9 +1,28 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
+
+/// 신규 가입 시 무작위로 배정하는 기본 별명 목록.
+const List<String> _kDefaultNicknames = [
+  '잠자는 판다', '뒹굴뒹굴 다람쥐', '느긋한 나무늘보', '몽글몽글 솜사탕토끼', '말랑한 아기사자',
+  '꼬물꼬물 햄스터', '바스락 고슴도치', '조용한 쿼카', '데굴데굴 너구리', '소심한 아기여우',
+  '뒤뚱뒤뚱 펭귄', '몽환적인 부엉이', '뽀송한 북극곰', '까칠한 아기수달', '햇살받은 해달',
+  '뒹구는 백곰', '살랑살랑 사막여우', '토실토실 아기돼지', '밤송이 다람쥐', '몽실몽실 알파카',
+  '꼬리치는 치타', '퐁실퐁실 푸들', '방울토마토 앵무새', '방구석 코알라', '느릿느릿 거북이',
+  '몽실한 아기고양이', '깜빡이는 올빼미', '촐랑촐랑 다람쥐', '수줍은 판다', '도도한 고양이',
+  '몽글한 북극여우', '씰룩씰룩 아기오리', '퐁당퐁당 수달', '꼬물거리는 애벌레', '뒹굴거리는 호랑이',
+  '보슬보슬 양모피', '까만눈 아기곰', '새침한 고슴도치', '쫄깃한 인절미토끼', '둥실둥실 구름오리',
+  '발랄한 아기사슴', '싱그러운 메추라기', '노곤한 판다곰', '사각사각 친칠라', '조잘조잘 참새',
+  '꼬르륵 아기수달', '몽상가 카피바라', '폭신폭신 쿼카', '반짝이는 눈망울 햄스터', '슬리퍼 신은 오리',
+];
+
+String _randomDefaultNickname() =>
+    _kDefaultNicknames[Random().nextInt(_kDefaultNicknames.length)];
 
 class GoogleSignInResult {
   final UserCredential userCredential;
@@ -66,6 +85,7 @@ class AuthService {
         uid: uid,
         email: email,
         name: name,
+        nickname: _randomDefaultNickname(),
         studentId: studentId,
         roomNumber: '000', // 기본값
         createdAt: DateTime.now(),
@@ -199,6 +219,7 @@ class AuthService {
       uid: uid,
       email: '$studentId@swu.ac.kr',
       name: displayName,
+      nickname: _randomDefaultNickname(),
       studentId: studentId,
       roomNumber: '000',
       createdAt: DateTime.now(),
@@ -239,7 +260,18 @@ class AuthService {
     try {
       DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
       if (doc.exists) {
-        return UserModel.fromMap(doc.data() as Map<String, dynamic>);
+        final data = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
+        // 신규 가입이 아닌 기존 계정은 별명이 없을 수 있다. 게시판/나눔방이 별명으로
+        // 운영되려면 모든 계정에 별명이 있어야 하므로, 조회 시점에 하나 배정해준다.
+        final nickname = data['nickname'] as String?;
+        if (nickname == null || nickname.trim().isEmpty) {
+          final assigned = _randomDefaultNickname();
+          data['nickname'] = assigned;
+          unawaited(
+            _firestore.collection('users').doc(uid).update({'nickname': assigned}).catchError((_) {}),
+          );
+        }
+        return UserModel.fromMap(data);
       }
       return null;
     } catch (e) {

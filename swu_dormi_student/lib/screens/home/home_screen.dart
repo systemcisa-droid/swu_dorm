@@ -24,7 +24,7 @@ import '../cleaning/move_out_inspection_screen.dart';
 import '../message/floor_chat_screen.dart';
 import '../attendance/attendance_screen.dart';
 import '../attendance/my_qr_code_page.dart';
-import '../reservation/reservation_screen.dart';
+import '../reservation/reservation_hub_screen.dart';
 import '../alarm/alarm_screen.dart';
 import '../timetable/timetable_page.dart';
 
@@ -734,6 +734,46 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      // 수업알람
+                      Material(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AlarmScreen(),
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 8),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.alarm,
+                                  size: 44,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                Text(
+                                  s.menuAlarm,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -867,6 +907,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
                 ListTile(
+                  leading: const Icon(Icons.menu_book_outlined, color: Colors.teal),
+                  title: Text(s.menuCouncilMinutes),
+                  contentPadding: const EdgeInsets.only(left: 32, right: 16),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(
+                        builder: (context) => const CouncilMinutesScreen()));
+                  },
+                ),
+                ListTile(
                   leading: const Icon(Icons.how_to_vote_outlined, color: Colors.lightBlue),
                   title: Text(s.menuCouncilElections),
                   contentPadding: const EdgeInsets.only(left: 32, right: 16),
@@ -886,16 +936,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 final navigator = Navigator.of(context);
                 navigator.pop();
                 if (!await _requireRegulationAgreement()) return;
-                navigator.push(MaterialPageRoute(builder: (context) => const ReservationScreen()));
-              },
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.alarm, color: Colors.indigo),
-              title: Text(s.menuAlarm),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const AlarmScreen()));
+                navigator.push(MaterialPageRoute(builder: (context) => const ReservationHubScreen()));
               },
             ),
             const Divider(height: 1),

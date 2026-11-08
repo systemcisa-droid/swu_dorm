@@ -60,16 +60,19 @@ class ChatUpload {
   }
 
   /// Storage 업로드 후 다운로드 URL 반환.
+  /// [collection]은 Storage 경로의 최상위 폴더(기본값 floor_chats)로, 다른 채팅
+  /// 기능(예: share_rooms)도 같은 업로드 로직을 재사용할 수 있게 한다.
   static Future<String> upload({
     required File file,
     required String roomId,
     required bool isVideo,
+    String collection = 'floor_chats',
   }) async {
     final ext = isVideo ? 'mp4' : 'jpg';
     final name = '${DateTime.now().millisecondsSinceEpoch}.$ext';
     final ref = FirebaseStorage.instance
         .ref()
-        .child('floor_chats')
+        .child(collection)
         .child(roomId)
         .child(name);
 

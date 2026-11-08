@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/alarm_model.dart';
 import 'alarm_service.dart';
 import 'native_alarm_channel.dart';
@@ -108,6 +110,46 @@ class ClassReminderSync {
       }
     } catch (e) {
       debugPrint('[수업 알림] 동기화 실패: $e');
+    }
+  }
+
+  /// 수업알람 목록에서 자동 생성된 알람(sourceClassId = "classId:offset")을
+  /// 사용자가 직접 삭제했을 때, 시간표에 남아있는 해당 사전 알림 체크를 꺼준다.
+  /// (꺼두지 않으면 다음 번 sync에서 같은 알람이 다시 만들어진다.)
+  static Future<void> clearReminderOffset(String sourceClassId) async {
+    final sep = sourceClassId.lastIndexOf(':');
+    if (sep < 0) return;
+    final classId = sourceClassId.substring(0, sep);
+    final offset = int.tryParse(sourceClassId.substring(sep + 1));
+    if (offset == null) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final timetablesJson = prefs.getString('timetables_data');
+      if (timetablesJson == null) return;
+
+      final List<dynamic> timetables = jsonDecode(timetablesJson);
+      var changed = false;
+      for (final timetable in timetables) {
+        final classes = timetable['classes'] as List<dynamic>?;
+        if (classes == null) continue;
+        for (final classMap in classes) {
+          if (classMap['id'] != classId) continue;
+          final offsets = Set<int>.from(
+            (classMap['reminderOffsets'] as List?) ?? const [],
+          );
+          if (offsets.remove(offset)) {
+            classMap['reminderOffsets'] = offsets.toList();
+            changed = true;
+          }
+        }
+      }
+
+      if (changed) {
+        await prefs.setString('timetables_data', jsonEncode(timetables));
+      }
+    } catch (e) {
+      debugPrint('[수업 알림] 시간표 알림 체크 해제 실패: $e');
     }
   }
 }

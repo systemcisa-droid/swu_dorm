@@ -5,7 +5,6 @@ const List<Map<String, dynamic>> kBoardCategories = [
   {'value': '물품 나눔',   'label': '물품 나눔(당근)',   'color': Colors.orange},
   {'value': '정보 알림',   'label': '정보 알림',   'color': Colors.blue},
   {'value': '세탁실톡',    'label': '세탁실톡',    'color': Colors.purple},
-  {'value': '배달팟',   'label': '배달팟',   'color': Colors.red},
   {'value': '맛집',        'label': '맛집',        'color': Colors.teal},
 ];
 
@@ -15,7 +14,6 @@ Color boardCategoryColor(String category) {
     case '물품 나눔(당근)':   return Colors.orange;
     case '정보 알림':   return Colors.blue;
     case '세탁실톡':    return Colors.purple;
-    case '배달팟':   return Colors.red;
     case '맛집':        return Colors.teal;
     case '시간표 공유': return Colors.indigo;
     default:            return Colors.grey;

@@ -134,15 +134,21 @@ class _TimetablePageState extends State<TimetablePage> {
           _initializeData();
         }
       });
-      _clearExampleTimetableReminders();
+      await _clearExampleTimetableReminders(prefs);
     } else {
       _initializeData();
     }
   }
 
-  /// 예시 시간표(id '1')에 예전 기본값(10분 전 알림)이 아직 남아있으면 한 번만
-  /// 지워준다. 참고용 시간표라 알람이 자동으로 울릴 필요가 없다.
-  void _clearExampleTimetableReminders() {
+  /// 예시 시간표(id '1')에 예전 기본값(10분 전 알림)이 남아있으면 지워준다.
+  /// 사용자가 만드는 첫 시간표도 id가 '1'이라 실제로 알람을 설정해 쓰는 경우가
+  /// 많으므로, 앱 전체에서 딱 한 번만 실행되게 플래그로 막아둔다(안 그러면
+  /// 페이지에 들어올 때마다 방금 설정한 알람까지 지워진다).
+  Future<void> _clearExampleTimetableReminders(SharedPreferences prefs) async {
+    const migratedKey = 'example_timetable_reminders_cleared';
+    if (prefs.getBool(migratedKey) ?? false) return;
+    await prefs.setBool(migratedKey, true);
+
     TimetableData? example;
     for (final t in _timetables) {
       if (t.id == '1') {

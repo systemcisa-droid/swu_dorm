@@ -6,6 +6,7 @@ import 'package:audioplayers/audioplayers.dart';
 import '../../providers/locale_provider.dart';
 import '../../models/alarm_model.dart';
 import '../../services/alarm_service.dart';
+import '../../services/class_reminder_sync.dart';
 import '../../services/native_alarm_channel.dart';
 import '../../utils/alarm_format.dart';
 import '../../utils/alarm_sounds.dart';
@@ -68,6 +69,37 @@ class _AlarmScreenState extends State<AlarmScreen> {
     return sorted.map((d) => labels[d - 1]).join(', ');
   }
 
+  Widget _buildBadgeChip({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required bool enabled,
+  }) {
+    final effectiveColor = enabled ? color : Colors.grey;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: effectiveColor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: effectiveColor),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: effectiveColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openEditor({AlarmModel? existing}) async {
     final result = await showModalBottomSheet<AlarmModel>(
       context: context,
@@ -93,6 +125,13 @@ class _AlarmScreenState extends State<AlarmScreen> {
     final updated = await _service.deleteAlarm(alarm.id);
     if (!mounted) return;
     setState(() => _alarms = updated);
+    // 시간표에서 자동으로 만들어진 알람이면, 지울 때 시간표의 해당
+    // 사전 알림(5/10/20분 전) 체크도 꺼준다. 안 그러면 다음 동기화 때
+    // 방금 지운 알람이 다시 생긴다.
+    final sourceClassId = alarm.sourceClassId;
+    if (sourceClassId != null) {
+      await ClassReminderSync.clearReminderOffset(sourceClassId);
+    }
   }
 
   Future<void> _toggle(AlarmModel alarm, bool value) async {
@@ -138,7 +177,7 @@ class _AlarmScreenState extends State<AlarmScreen> {
         backgroundColor: const Color(0xFFF5F6F8),
         elevation: 0,
         foregroundColor: Colors.black87,
-        title: Text(isEnglish ? 'Mission Alarm' : '미션알람'),
+        title: Text(isEnglish ? 'class Alarm(no lateness)' : '수업알람(지각 nono)'),
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
@@ -155,8 +194,8 @@ class _AlarmScreenState extends State<AlarmScreen> {
                     padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
                     child: Text(
                       isEnglish
-                          ? 'All mission alarms are off'
-                          : '모든 미션알람이\n꺼진 상태입니다',
+                          ? 'All class alarms are off'
+                          : '모든 알람이 꺼진 상태입니다',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 20,
@@ -180,8 +219,8 @@ class _AlarmScreenState extends State<AlarmScreen> {
                               const SizedBox(height: 12),
                               Text(
                                 isEnglish
-                                    ? 'No mission alarms yet. Tap + to add one.'
-                                    : '등록된 미션알람이 없습니다. +를 눌러 추가하세요.',
+                                    ? 'No class alarms yet. Tap + to add one.'
+                                    : '등록된 수업알람이 없습니다. +를 눌러 추가하세요.',
                               ),
                             ],
                           ),
@@ -237,65 +276,58 @@ class _AlarmScreenState extends State<AlarmScreen> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            if (alarm.qrDismissEnabled &&
-                                                (alarm.qrCode?.isNotEmpty ??
-                                                    false))
+                                            if (alarm.sourceClassId != null ||
+                                                alarm.qrDismissEnabled ||
+                                                alarm.shakeDismissEnabled)
                                               Padding(
                                                 padding: const EdgeInsets.only(
                                                   bottom: 4,
                                                 ),
-                                                child: Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 7,
-                                                        vertical: 2,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color:
-                                                        (alarm.enabled
-                                                                ? const Color(
-                                                                    0xFF5B5FEF,
-                                                                  )
-                                                                : Colors.grey)
-                                                            .withValues(
-                                                              alpha: 0.12,
-                                                            ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          6,
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    if (alarm.sourceClassId !=
+                                                        null) ...[
+                                                      _buildBadgeChip(
+                                                        icon: Icons.menu_book,
+                                                        label: isEnglish
+                                                            ? 'Class Alarm'
+                                                            : '수업알람',
+                                                        color: const Color(
+                                                          0xFF2E9E6D,
                                                         ),
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      Icon(
-                                                        Icons.qr_code,
-                                                        size: 12,
-                                                        color: alarm.enabled
-                                                            ? const Color(
-                                                                0xFF5B5FEF,
-                                                              )
-                                                            : Colors.grey,
+                                                        enabled: alarm.enabled,
                                                       ),
-                                                      const SizedBox(width: 3),
-                                                      Text(
-                                                        isEnglish
-                                                            ? 'Mission Alarm'
-                                                            : '미션알람',
-                                                        style: TextStyle(
-                                                          fontSize: 11,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color: alarm.enabled
-                                                              ? const Color(
-                                                                  0xFF5B5FEF,
-                                                                )
-                                                              : Colors.grey,
-                                                        ),
-                                                      ),
+                                                      const SizedBox(width: 4),
                                                     ],
-                                                  ),
+                                                    if (alarm.qrDismissEnabled &&
+                                                        (alarm.qrCode
+                                                                ?.isNotEmpty ??
+                                                            false))
+                                                      _buildBadgeChip(
+                                                        icon: Icons.qr_code,
+                                                        label: isEnglish
+                                                            ? 'QR Mission'
+                                                            : 'QR 미션',
+                                                        color: const Color(
+                                                          0xFF5B5FEF,
+                                                        ),
+                                                        enabled: alarm.enabled,
+                                                      )
+                                                    else if (alarm
+                                                        .shakeDismissEnabled)
+                                                      _buildBadgeChip(
+                                                        icon: Icons.vibration,
+                                                        label: isEnglish
+                                                            ? 'Shake Mission'
+                                                            : '흔들기 미션',
+                                                        color: const Color(
+                                                          0xFFFF9800,
+                                                        ),
+                                                        enabled: alarm.enabled,
+                                                      ),
+                                                  ],
                                                 ),
                                               ),
                                             if (alarm.label.isNotEmpty)
@@ -387,6 +419,8 @@ class _AlarmEditSheetState extends State<_AlarmEditSheet> {
   late TextEditingController _labelController;
   late bool _qrDismissEnabled;
   String? _qrCode;
+  late bool _shakeDismissEnabled;
+  late int _shakeTargetCount;
   late bool _soundEnabled;
   late String _soundId;
   String? _soundUri;
@@ -416,6 +450,8 @@ class _AlarmEditSheetState extends State<_AlarmEditSheet> {
     _labelController = TextEditingController(text: existing?.label ?? '');
     _qrDismissEnabled = existing?.qrDismissEnabled ?? false;
     _qrCode = existing?.qrCode ?? _kDefaultMissionQrCode;
+    _shakeDismissEnabled = existing?.shakeDismissEnabled ?? false;
+    _shakeTargetCount = existing?.shakeTargetCount ?? 15;
     _soundEnabled = existing?.soundEnabled ?? true;
     _soundId = existing?.soundId ?? kDefaultAlarmSoundId;
     _soundUri = existing?.soundUri;
@@ -555,6 +591,8 @@ class _AlarmEditSheetState extends State<_AlarmEditSheet> {
       repeatDays: _repeatDays,
       qrDismissEnabled: _qrDismissEnabled,
       qrCode: _qrDismissEnabled ? _qrCode : null,
+      shakeDismissEnabled: _shakeDismissEnabled,
+      shakeTargetCount: _shakeTargetCount,
       soundEnabled: _soundEnabled,
       soundId: _soundId,
       soundUri: _soundUri,
@@ -563,6 +601,7 @@ class _AlarmEditSheetState extends State<_AlarmEditSheet> {
       snoozeEnabled: _snoozeEnabled,
       snoozeMinutes: _snoozeMinutes,
       snoozeRepeatCount: _snoozeRepeatCount,
+      sourceClassId: widget.existing?.sourceClassId,
     );
     Navigator.pop(context, alarm);
   }
@@ -819,7 +858,10 @@ class _AlarmEditSheetState extends State<_AlarmEditSheet> {
               ),
               activeThumbColor: const Color(0xFF5B5FEF),
               value: _qrDismissEnabled,
-              onChanged: (value) => setState(() => _qrDismissEnabled = value),
+              onChanged: (value) => setState(() {
+                _qrDismissEnabled = value;
+                if (value) _shakeDismissEnabled = false;
+              }),
             ),
             if (_qrDismissEnabled)
               Padding(
@@ -844,6 +886,47 @@ class _AlarmEditSheetState extends State<_AlarmEditSheet> {
                       onPressed: _scanQrCode,
                       icon: const Icon(Icons.qr_code_scanner),
                       label: Text(isEnglish ? 'Scan' : 'QR 스캔'),
+                    ),
+                  ],
+                ),
+              ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(isEnglish ? 'Turn off by shaking' : '흔들어서 끄기(미션알람)'),
+              subtitle: Text(
+                isEnglish
+                    ? 'The alarm can only be stopped by shaking the phone.'
+                    : '휴대폰을 흔들어야만 알람을 끌 수 있습니다.',
+              ),
+              activeThumbColor: const Color(0xFF5B5FEF),
+              value: _shakeDismissEnabled,
+              onChanged: (value) => setState(() {
+                _shakeDismissEnabled = value;
+                if (value) _qrDismissEnabled = false;
+              }),
+            ),
+            if (_shakeDismissEnabled)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Text(isEnglish ? 'Shake count' : '흔들기 횟수'),
+                    const SizedBox(width: 12),
+                    Wrap(
+                      spacing: 6,
+                      children: [10, 15, 20].map((count) {
+                        final selected = _shakeTargetCount == count;
+                        return FilterChip(
+                          label: Text(isEnglish ? '$count' : '$count회'),
+                          selected: selected,
+                          selectedColor: const Color(
+                            0xFF5B5FEF,
+                          ).withValues(alpha: 0.2),
+                          checkmarkColor: const Color(0xFF5B5FEF),
+                          onSelected: (_) =>
+                              setState(() => _shakeTargetCount = count),
+                        );
+                      }).toList(),
                     ),
                   ],
                 ),

@@ -131,6 +131,12 @@ service cloud.firestore {
                       (isSignedIn() &&
                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount', 'viewedUsers']));
     }
+    // 회의록: 식단표와 동일하게 연도/월/주차 슬롯에 PDF 한 장씩 등록한다.
+    // 학생은 읽기만 하고, 조회수 등 학생 쪽에서 바꾸는 필드가 없어 쓰기는 전부 관리자 전용이다.
+    match /council_minutes/{docId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
     match /council_campaigns/{docId} {
       allow read: if isSignedIn();
       allow create, delete: if isAdmin();
@@ -140,8 +146,17 @@ service cloud.firestore {
                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount', 'viewedUsers']) ||
                         // 좋아요 (likes/likeCount만 변경, 본인 uid만 추가·제거, likeCount는 likes 개수와 일치)
                         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likeCount']) &&
-                         isOwnLikeChange())
+                         isOwnLikeChange()) ||
+                        // 댓글수 (댓글 등록/삭제 시 commentCount만 증감)
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount'])
                       ));
+    }
+    // 캠페인 댓글. board_comments와 동일한 정책: 본인 작성, 본인 또는 관리자만 삭제.
+    match /campaign_comments/{commentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.authorId == request.auth.uid);
     }
     match /council_elections/{docId} {
       allow read: if isSignedIn();
@@ -354,6 +369,34 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update: if false;
       allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // 나눔방 (가상 슬롯 A~D, 당일 글 게시판 형태)
+    match /share_rooms/{roomId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if false;
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      // 나눔방에 딸린 채팅. 나눔방이 지워지면 메시지도 더 이상 보이지 않는다.
+      // 층장단톡방과 동일하게 이모티콘 반응(본인 반응만)과, 본인이 보낸 메시지의
+      // 수정(text/edited/editedAt)만 허용한다.
+      match /messages/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+        allow update: if isSignedIn() &&
+                        (
+                          (
+                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']) &&
+                            request.resource.data.reactions.diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([request.auth.uid])
+                          ) ||
+                          (
+                            resource.data.senderId == request.auth.uid &&
+                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited', 'editedAt'])
+                          )
+                        );
+        allow delete: if isAdmin() || (isSignedIn() && resource.data.senderId == request.auth.uid);
+      }
     }
 
     // Attendance Records collection (출석 기록)

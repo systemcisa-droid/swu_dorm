@@ -1,4 +1,4 @@
-// 세미나실 예약 화면에서 사용하는 다국어 문자열
+// 세미나실 예약 화면 및 예약 허브 화면에서 사용하는 다국어 문자열
 class ReservationStrings {
   final bool isEnglish;
   const ReservationStrings(this.isEnglish);
@@ -37,4 +37,11 @@ class ReservationStrings {
       'Room 125 (Shalom House) cannot be reserved on Mondays from 22:00 to 23:30');
   String get slotBlockedByRule =>
       _t('이 시간대는 예약이 제한되어 있습니다', 'Reservations are restricted for this time slot');
+
+  // 예약 허브 화면 (세미나실/소모임 선택)
+  String get hubTitle => _t('예약', 'Reservation');
+  String get hubSeminarRoomSubtitle =>
+      _t('당일 시간대를 선택해 세미나실을 예약합니다', 'Reserve a seminar room by picking a time slot today');
+  String get hubShareRoomSubtitle =>
+      _t('주제를 올려 소모임을 개설하거나 다른 학생의 소모임을 확인합니다', 'Post a topic to open a meetup, or browse others\' meetups');
 }

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.7+10
+version: 1.0.8+11
 
 environment:
   sdk: ^3.9.2
@@ -67,6 +67,7 @@ dependencies:
   mobile_scanner: ^7.1.4
   qr_flutter: ^4.1.0
   audioplayers: ^6.1.0
+  sensors_plus: ^6.1.2
 
 dev_dependencies:
   flutter_test:
@@ -126,15 +127,16 @@ flutter:
 
 # Flutter Native Splash 설정
 flutter_native_splash:
-  color: "#FFFFFF"
+  # 로고의 코랄 톤과 어울리는 은은한 블러시 톤 (기존 순백색 대신)
+  color: "#FDEEEA"
   android: true
   ios: true
   web: false
 
   # 안드로이드 12+ 설정
   android_12:
-    color: "#FFFFFF"
-    icon_background_color: "#FFFFFF"
+    color: "#FDEEEA"
+    icon_background_color: "#FDEEEA"
 
 # Flutter Launcher Icons 설정
 flutter_launcher_icons:
@@ -142,5 +144,5 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/images/logo.png"
   remove_alpha_ios: true
-  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_background: "#FDEEEA"
   adaptive_icon_foreground: "assets/images/logo.png"

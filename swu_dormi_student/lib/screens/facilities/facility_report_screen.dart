@@ -680,17 +680,19 @@ class _FacilityReportList extends StatefulWidget {
 }
 
 class _FacilityReportListState extends State<_FacilityReportList> {
-  String _getStatusText(String status) {
-    switch (status) {
+  String _getStatusText(FacilityReportModel report) {
+    if (report.status == 'completed' && report.selfResolved) return '자체 처리';
+    switch (report.status) {
       case 'pending': return '접수 대기';
       case 'in_progress': return '처리 중';
       case 'completed': return '처리 완료';
-      default: return status;
+      default: return report.status;
     }
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
+  Color _getStatusColor(FacilityReportModel report) {
+    if (report.status == 'completed' && report.selfResolved) return Colors.purple;
+    switch (report.status) {
       case 'pending': return Colors.orange;
       case 'in_progress': return Colors.blue;
       case 'completed': return Colors.green;
@@ -763,7 +765,7 @@ class _FacilityReportListState extends State<_FacilityReportList> {
   }
 
   Widget _buildReportCard(FacilityReportModel report, FacilityReportStrings s) {
-    final canEdit = report.status == 'pending';
+    final canSelfResolve = report.status != 'completed';
     return Card(
       elevation: 2,
       child: InkWell(
@@ -779,43 +781,34 @@ class _FacilityReportListState extends State<_FacilityReportList> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
-                      color: _getStatusColor(report.status).withOpacity(0.1),
+                      color: _getStatusColor(report).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _getStatusColor(report.status)),
+                      border: Border.all(color: _getStatusColor(report)),
                     ),
                     child: Text(
-                      s.status(_getStatusText(report.status)),
+                      s.status(_getStatusText(report)),
                       style: TextStyle(
-                        color: _getStatusColor(report.status),
+                        color: _getStatusColor(report),
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                   const Spacer(),
-                  if (canEdit) ...[
-                    SizedBox(
-                      width: 32,
-                      height: 32,
-                      child: IconButton(
-                        padding: EdgeInsets.zero,
-                        icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blue),
-                        tooltip: s.edit,
-                        onPressed: () => _showEditDialog(report, s),
+                  if (canSelfResolve)
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    SizedBox(
-                      width: 32,
-                      height: 32,
-                      child: IconButton(
-                        padding: EdgeInsets.zero,
-                        icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                        tooltip: s.delete,
-                        onPressed: () => _deleteReport(report, s),
+                      icon: const Icon(Icons.check_circle_outline, size: 18, color: Colors.green),
+                      label: Text(
+                        s.selfResolveButton,
+                        style: const TextStyle(color: Colors.green, fontSize: 13),
                       ),
+                      onPressed: () => _showSelfResolveDialog(report, s),
                     ),
-                  ],
                 ],
               ),
               const SizedBox(height: 8),
@@ -878,6 +871,26 @@ class _FacilityReportListState extends State<_FacilityReportList> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
+                  ),
+                ),
+              ],
+              if (report.selfResolved &&
+                  report.selfResolvedNote != null &&
+                  report.selfResolvedNote!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade100),
+                  ),
+                  child: Text(
+                    report.selfResolvedNote!,
+                    style: TextStyle(fontSize: 13, color: Colors.green.shade800),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -965,14 +978,14 @@ class _FacilityReportListState extends State<_FacilityReportList> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                             decoration: BoxDecoration(
-                              color: _getStatusColor(report.status).withOpacity(0.1),
+                              color: _getStatusColor(report).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: _getStatusColor(report.status), width: 1.5),
+                              border: Border.all(color: _getStatusColor(report), width: 1.5),
                             ),
                             child: Text(
-                              s.status(_getStatusText(report.status)),
+                              s.status(_getStatusText(report)),
                               style: TextStyle(
-                                color: _getStatusColor(report.status),
+                                color: _getStatusColor(report),
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -1042,6 +1055,22 @@ class _FacilityReportListState extends State<_FacilityReportList> {
                           ),
                           child: Text(
                             report.technicianNote!,
+                            style: const TextStyle(fontSize: 15, height: 1.5),
+                          ),
+                        ),
+                      ],
+                      if (report.selfResolved &&
+                          report.selfResolvedNote != null &&
+                          report.selfResolvedNote!.isNotEmpty) ...[
+                        const Divider(height: 32),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.green[50],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            report.selfResolvedNote!,
                             style: const TextStyle(fontSize: 15, height: 1.5),
                           ),
                         ),
@@ -1116,274 +1145,75 @@ class _FacilityReportListState extends State<_FacilityReportList> {
     );
   }
 
-  // ── 수정 다이얼로그 ────────────────────────────────────────────
-  void _showEditDialog(FacilityReportModel report, FacilityReportStrings s) {
-    final descCtrl = TextEditingController(text: report.description);
-    String selectedCat = report.category;
-    final List<String> remainingUrls = List<String>.from(report.mediaUrls ?? []);
-    final List<File> newFiles = [];
-    final picker = ImagePicker();
-
-    void pickImage(StateSetter setS) async {
-      if (remainingUrls.length + newFiles.length >= 5) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.maxAttachNotice)),
-        );
-        return;
-      }
-      final file = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1280,
-        maxHeight: 720,
-        imageQuality: 70,
-      );
-      if (file != null) setS(() => newFiles.add(File(file.path)));
-    }
-
-    showModalBottomSheet(
+  // ── 자체 처리 ────────────────────────────────────────────────
+  void _showSelfResolveDialog(FacilityReportModel report, FacilityReportStrings s) {
+    final noteCtrl = TextEditingController();
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-          ),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(s.editRequestTitle,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                Text(s.requestTypeLabel,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _FacilityReportFormState._categories.map((cat) {
-                    final isSel = selectedCat == cat['value'];
-                    return ChoiceChip(
-                      label: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(cat['icon'] as IconData,
-                              size: 16,
-                              color: isSel ? Colors.white : Colors.grey[700]),
-                          const SizedBox(width: 4),
-                          Text(s.category(cat['label'] as String)),
-                        ],
-                      ),
-                      selected: isSel,
-                      onSelected: (_) =>
-                          setS(() => selectedCat = cat['value'] as String),
-                      selectedColor: Theme.of(context).colorScheme.primary,
-                      labelStyle: TextStyle(
-                          color: isSel ? Colors.white : Colors.grey[700]),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: descCtrl,
-                  decoration: InputDecoration(
-                    labelText: s.detailDescription,
-                    border: const OutlineInputBorder(),
-                    alignLabelWithHint: true,
-                  ),
-                  maxLines: 4,
-                  maxLength: 500,
-                ),
-                const SizedBox(height: 16),
-                // ── 첨부 이미지 ──────────────────────────────
-                Row(
-                  children: [
-                    Text.rich(
-                      TextSpan(
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                        children: [
-                          TextSpan(text: s.attachedImages(remainingUrls.length + newFiles.length)),
-                          const TextSpan(text: ' *', style: TextStyle(color: Colors.red)),
-                        ],
-                      ),
-                    ),
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: () => pickImage(setS),
-                      icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
-                      label: Text(s.add),
-                    ),
-                  ],
-                ),
-                if (remainingUrls.isNotEmpty || newFiles.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      // 기존 이미지 (URL)
-                      ...remainingUrls.asMap().entries.map((e) => _buildEditThumb(
-                        child: Image.network(e.value, fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.grey)),
-                        onRemove: () => setS(() => remainingUrls.removeAt(e.key)),
-                      )),
-                      // 새로 추가한 이미지 (파일)
-                      ...newFiles.asMap().entries.map((e) => _buildEditThumb(
-                        child: Image.file(e.value, fit: BoxFit.cover),
-                        onRemove: () => setS(() => newFiles.removeAt(e.key)),
-                      )),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () async {
-                    final desc = descCtrl.text.trim();
-                    if (desc.isEmpty) return;
-                    // 사진/영상 첨부는 필수 — 수정 시에도 최소 1개는 남겨야 한다.
-                    if (remainingUrls.isEmpty && newFiles.isEmpty) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        SnackBar(
-                          content: Text(s.photoVideoRequired),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                      return;
-                    }
-                    Navigator.pop(ctx);
-                    await _doUpdate(
-                      report.id,
-                      selectedCat,
-                      desc,
-                      remainingUrls: remainingUrls,
-                      newFiles: newFiles,
-                      s: s,
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 48),
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text(s.save, style: const TextStyle(fontSize: 16)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEditThumb({required Widget child, required VoidCallback onRemove}) {
-    return SizedBox(
-      width: 80,
-      height: 80,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: child,
-          ),
-          Positioned(
-            top: 2,
-            right: 2,
-            child: GestureDetector(
-              onTap: onRemove,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                ),
-                padding: const EdgeInsets.all(2),
-                child: const Icon(Icons.close, size: 14, color: Colors.white),
+      builder: (ctx) => AlertDialog(
+        title: Text(s.selfResolveTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(s.selfResolveConfirm),
+            const SizedBox(height: 12),
+            TextField(
+              controller: noteCtrl,
+              decoration: InputDecoration(
+                labelText: s.selfResolveNoteHint,
+                border: const OutlineInputBorder(),
               ),
+              maxLines: 3,
+              maxLength: 200,
             ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: Text(s.cancel)),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _doSelfResolve(report.id, noteCtrl.text.trim(), s);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(s.selfResolveConfirmButton),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _doUpdate(
+  Future<void> _doSelfResolve(
     String id,
-    String category,
-    String description, {
-    required List<String> remainingUrls,
-    required List<File> newFiles,
-    required FacilityReportStrings s,
-  }) async {
+    String note,
+    FacilityReportStrings s,
+  ) async {
     try {
-      final List<String> uploadedUrls = [];
-      final startIdx = remainingUrls.length;
-      for (int i = 0; i < newFiles.length; i++) {
-        final url = await StorageService().uploadRepairMedia(id, newFiles[i], startIdx + i);
-        if (url != null) uploadedUrls.add(url);
-      }
-      final allUrls = [...remainingUrls, ...uploadedUrls];
-
       await FirebaseFirestore.instance
           .collection('facility_reports')
           .doc(id)
           .update({
-        'category': category,
-        'description': description,
-        'mediaUrls': allUrls.isEmpty ? null : allUrls,
+        'status': 'completed',
+        'completedAt': Timestamp.now(),
+        'selfResolved': true,
+        'selfResolvedNote': note.isEmpty ? null : note,
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(s.updated), backgroundColor: Colors.green),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(s.updateError(e))));
-      }
-    }
-  }
-
-  // ── 삭제 ────────────────────────────────────────────────────
-  Future<void> _deleteReport(FacilityReportModel report, FacilityReportStrings s) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.deleteRequestTitle),
-        content: Text(s.deleteRequestConfirm),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(s.cancel)),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child:
-                Text(s.delete, style: const TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    try {
-      await FirebaseFirestore.instance
-          .collection('facility_reports')
-          .doc(report.id)
-          .delete();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(s.deleted), backgroundColor: Colors.green),
+              content: Text(s.selfResolveSuccess),
+              backgroundColor: Colors.green),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(s.deleteError(e))));
+            .showSnackBar(SnackBar(content: Text(s.selfResolveError(e))));
       }
     }
   }

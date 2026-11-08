@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vibration/vibration.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 import '../../providers/locale_provider.dart';
 import '../../models/alarm_model.dart';
 import '../../services/alarm_service.dart';
@@ -24,24 +26,63 @@ class AlarmRingScreen extends StatefulWidget {
 }
 
 class _AlarmRingScreenState extends State<AlarmRingScreen> {
+  // 가속도 크기가 이 값(m/s²)을 넘으면 한 번의 흔들림으로 센다.
+  static const double _shakeThreshold = 12.0;
+
   AudioPlayer? _audioPlayer;
   MobileScannerController? _scannerController;
+  StreamSubscription<UserAccelerometerEvent>? _accelSubscription;
   bool _isProcessingScan = false;
   bool _isSoundMuted = false;
   bool _missionSucceeded = false;
   String? _errorMessage;
   Timer? _autoCloseTimer;
   String? _bannerImageUrl;
+  int _shakeCount = 0;
+  DateTime? _lastShakeAt;
+
+  bool get _requiresQr =>
+      widget.alarm.qrDismissEnabled && (widget.alarm.qrCode?.isNotEmpty ?? false);
+  bool get _requiresShake => !_requiresQr && widget.alarm.shakeDismissEnabled;
+  int get _shakeTarget => widget.alarm.shakeTargetCount;
 
   @override
   void initState() {
     super.initState();
     _startRinging();
     _loadBannerImage();
-    if (widget.alarm.qrDismissEnabled &&
-        (widget.alarm.qrCode?.isNotEmpty ?? false)) {
+    if (_requiresQr) {
       _scannerController = MobileScannerController();
+    } else if (_requiresShake) {
+      _startShakeDetection();
     }
+  }
+
+  /// 흔들기 미션: 가속도 크기가 임계값을 넘는 움직임을 셌다가, 목표 횟수에
+  /// 도달하면 QR 미션과 동일하게 성공 처리한다. 같은 흔들림을 여러 번
+  /// 세지 않도록 짧은 쿨다운을 둔다.
+  void _startShakeDetection() {
+    // normalInterval(200ms)은 표본 사이가 너무 떠서 흔드는 순간의 가속도
+    // 정점을 놓치기 쉽다. gameInterval(20ms)로 촘촘하게 측정해야 잡힌다.
+    _accelSubscription = userAccelerometerEventStream(
+      samplingPeriod: SensorInterval.gameInterval,
+    ).listen((event) {
+      final magnitude = math.sqrt(
+        event.x * event.x + event.y * event.y + event.z * event.z,
+      );
+      if (magnitude < _shakeThreshold) return;
+      final now = DateTime.now();
+      if (_lastShakeAt != null &&
+          now.difference(_lastShakeAt!) < const Duration(milliseconds: 400)) {
+        return;
+      }
+      _lastShakeAt = now;
+      if (!mounted) return;
+      setState(() => _shakeCount++);
+      if (_shakeCount >= _shakeTarget) {
+        _handleMissionSuccess();
+      }
+    });
   }
 
   /// 홈 화면과 같은 배너 이미지를 배경으로 쓴다(settings/home.bannerImageUrl).
@@ -149,6 +190,7 @@ class _AlarmRingScreenState extends State<AlarmRingScreen> {
     _audioPlayer?.dispose();
     if (_usesSystemRingtone) NativeAlarmChannel.stopSystemRingtoneLoop();
     _scannerController?.dispose();
+    _accelSubscription?.cancel();
     super.dispose();
   }
 
@@ -166,7 +208,7 @@ class _AlarmRingScreenState extends State<AlarmRingScreen> {
     if (value == null) return;
     _isProcessingScan = true;
     if (value == widget.alarm.qrCode) {
-      _handleQrSuccess();
+      _handleMissionSuccess();
     } else {
       setState(() => _errorMessage = '등록된 QR 코드와 일치하지 않습니다.');
       Future.delayed(const Duration(milliseconds: 800), () {
@@ -175,9 +217,9 @@ class _AlarmRingScreenState extends State<AlarmRingScreen> {
     }
   }
 
-  /// QR 미션 성공: 소리/진동은 바로 멈추고, 성공 화면을 보여준다.
+  /// 미션(QR 스캔/흔들기) 성공: 소리/진동은 바로 멈추고, 성공 화면을 보여준다.
   /// 확인 버튼을 누르거나, 누르지 않으면 일정 시간 뒤 자동으로 닫힌다.
-  void _handleQrSuccess() {
+  void _handleMissionSuccess() {
     Vibration.cancel();
     _stopSound();
     setState(() => _missionSucceeded = true);
@@ -194,8 +236,8 @@ class _AlarmRingScreenState extends State<AlarmRingScreen> {
     final isEnglish = Provider.of<LocaleProvider>(context).isEnglish;
     final alarm = widget.alarm;
     final timeLabel = formatAlarmClock(alarm.hour, alarm.minute, isEnglish);
-    final requiresQr =
-        alarm.qrDismissEnabled && (alarm.qrCode?.isNotEmpty ?? false);
+    final requiresQr = _requiresQr;
+    final requiresShake = _requiresShake;
 
     // 뒤로가기로 소리 없이 빠져나가는 것을 막는다. 끄기/QR 스캔/다시 울림
     // 버튼으로만 알람을 멈출 수 있어야 "끌 때까지 계속 울림" 요구에 맞는다.
@@ -317,6 +359,73 @@ class _AlarmRingScreenState extends State<AlarmRingScreen> {
                                 style: const TextStyle(color: Colors.redAccent),
                               ),
                             ),
+                          if (_canSnooze)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(double.infinity, 48),
+                                  side: const BorderSide(color: Colors.white54),
+                                ),
+                                onPressed: _snooze,
+                                child: Text(
+                                  isEnglish ? 'Snooze' : '다시 울림',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            )
+                          else
+                            const SizedBox(height: 16),
+                        ] else if (requiresShake) ...[
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Text(
+                              isEnglish
+                                  ? 'Shake your phone to stop the alarm.'
+                                  : '휴대폰을 흔들면 알람이 꺼집니다.',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.vibration,
+                                    color: Colors.white,
+                                    size: 72,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  SizedBox(
+                                    width: 200,
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: LinearProgressIndicator(
+                                        value: (_shakeCount / _shakeTarget)
+                                            .clamp(0.0, 1.0),
+                                        minHeight: 10,
+                                        backgroundColor: Colors.white24,
+                                        color: const Color(0xFF5B5FEF),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '$_shakeCount / $_shakeTarget',
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                           if (_canSnooze)
                             Padding(
                               padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),

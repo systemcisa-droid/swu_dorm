@@ -14,12 +14,10 @@ class BoardStrings {
   String noPostsInCategory(String category) =>
       _t("'$category' 게시글이 없습니다", "No posts in '$category'");
   String get nicknameNotice =>
-      _t('게시판은 별명으로 이용 가능합니다. 프로필에서 별명을 설정할 수 있어요.',
-          'You can use a nickname on the board. You can set a nickname in your profile.');
-
+      _t('게시판은 별명으로 운영됩니다. ',
+          'The board is operated using nicknames.');
   static const Map<String, String> _categoryEn = {
     'Lost&Found': 'Lost&Found',
-    '배달팟': 'Delivery Group',
     '물품 나눔(당근)': 'Item Giveaway',
     '정보 알림': 'Info & Alerts',
     '세탁실톡': 'Laundry Room Talk',
@@ -37,7 +35,6 @@ class BoardStrings {
   String get postTitleLabel => _t('제목', 'Title');
   static const Map<String, String> _titleHintKo = {
     'lost&found': '무엇을 분실 하셨나요?',
-    '배달팟': '배달비 아끼고 같이 먹어요^^',
     '물품 나눔': '나눔해요. 교환도 좋아요',
     '정보 알림': '행사, 정보, 팁 공유해요',
     '세탁실톡': '세탁기, 건조기 사용 후에 깜빡 하셨지요?!',
@@ -46,7 +43,6 @@ class BoardStrings {
   };
   static const Map<String, String> _titleHintEn = {
     'lost&found': 'What did you lose?',
-    '배달팟': 'Save on delivery fees, let\'s eat together^^',
     '물품 나눔': 'Let\'s share or trade items',
     '정보 알림': 'Share events, info, and tips',
     '세탁실톡': 'Forgot to grab your laundry from the washer/dryer?!',
@@ -63,7 +59,6 @@ class BoardStrings {
 
   static const Map<String, String> _contentHintKo = {
     'lost&found': '예) 0000분실 했어요. 보신분 손!!!',
-    '배달팟': '예) 배달비 아끼고 맛있는 음식 같이 먹어요. 치킨, 피자 고고~',
     '물품 나눔': '예) 서로 나눔해요~ 남는 샴푸, 사용하지 않는 모자, 갈 수 없는 공연 티켓 ㅠㅠ',
     '정보 알림': '예) 땡땡인의 밤 모여 취업, 행사 등 정보 공유해요~',
     '세탁실톡': '예) 8번 세탁기 완료 빨래 찾아가세요~',
@@ -72,7 +67,6 @@ class BoardStrings {
   };
   static const Map<String, String> _contentHintEn = {
     'lost&found': 'e.g. I lost 0000. If you\'ve seen it, please raise your hand!',
-    '배달팟': 'e.g. Split delivery fees and enjoy good food together. Chicken, pizza, let\'s go~',
     '물품 나눔': 'e.g. Let\'s share with each other~ Extra shampoo, unused hats, tickets you can\'t use ㅠㅠ',
     '정보 알림': 'e.g. Gather info on jobs, events, and more with fellow students~',
     '세탁실톡': 'e.g. Washer #8 is done, please pick up your laundry~',

@@ -930,7 +930,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.event_seat, color: Colors.indigo),
+              leading: const Icon(Icons.widgets_outlined, color: Colors.indigo),
               title: Text(s.menuReservation),
               onTap: () async {
                 final navigator = Navigator.of(context);

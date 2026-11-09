@@ -363,12 +363,17 @@ service cloud.firestore {
 
     // Seminar Room Reservations collection (세미나실 예약)
     // 같은 날짜의 다른 학생 예약 슬롯을 확인해야 하므로 로그인 사용자는 목록 전체를 읽을 수 있다.
-    // 생성/삭제는 본인 예약에 대해서만 허용하고, 수정은 막아(예약 정정은 취소 후 재예약) 데이터 일관성을 보장한다.
+    // 생성은 본인 예약에 대해서만 허용한다. 하루 1건 제한을 취소로 우회하지 못하도록,
+    // 학생의 "취소"는 문서를 삭제하지 않고 cancelled 플래그만 세워(슬롯은 비워주되 당일
+    // 재예약 체크에는 그대로 걸리도록) 처리한다. 관리자는 정리를 위해 삭제할 수 있다.
     match /seminar_room_reservations/{reservationId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if false;
-      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAdmin() ||
+                      (isSignedIn() && resource.data.userId == request.auth.uid &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cancelled', 'cancelledAt']) &&
+                       request.resource.data.cancelled == true);
+      allow delete: if isAdmin();
     }
 
     // 나눔방 (가상 슬롯 A~D, 당일 글 게시판 형태)

@@ -13,6 +13,9 @@ class ReservationStrings {
       _t('1일 1인당 최대 2시간 예약 가능', 'Up to 2 hours per person per day');
   String get cautionNoProxy =>
       _t('예약자 본인이 직접 예약(대리불가)', 'Reserve in person only (no proxy reservations)');
+  String get cautionOneTimeOnly => _t(
+      '1일 1회 신청 가능하며 당일 취소 후 재신청 불가합니다. 신청 시간을 정확히 확인하여 신청 바랍니다.',
+      'Only one reservation per day is allowed, and you cannot reapply after cancelling on the same day. Please check the reservation time carefully before applying.');
   String get myReservationTitle => _t('내 예약', 'My Reservation');
   String get noMyReservation => _t('오늘 예약이 없습니다', 'No reservation today');
   String get reserveButton => _t('예약하기', 'Reserve');
@@ -27,7 +30,13 @@ class ReservationStrings {
       _t('$room $timeRange 예약이 완료되었습니다', 'Reserved $room at $timeRange');
   String get cancelSuccess => _t('예약이 취소되었습니다', 'Reservation cancelled');
   String get cancelConfirmTitle => _t('예약 취소', 'Cancel Reservation');
-  String get cancelConfirmContent => _t('예약을 취소하시겠습니까?', 'Are you sure you want to cancel this reservation?');
+  String get cancelConfirmContent => _t(
+      '예약을 취소하시겠습니까?\n취소 후에는 오늘 다시 예약할 수 없습니다.',
+      'Are you sure you want to cancel this reservation?\nYou will not be able to reserve again today after cancelling.');
+  String get cancelledTodayTitle => _t('예약 취소됨', 'Reservation Cancelled');
+  String get cancelledTodayNotice => _t(
+      '오늘 예약을 취소했습니다. 하루 1건 제한으로 같은 날에는 다시 예약할 수 없습니다.',
+      'You cancelled your reservation today. Since only one reservation per day is allowed, you cannot reserve again today.');
   String get keep => _t('아니요', 'No');
   String get confirm => _t('취소하기', 'Yes, Cancel');
   String errorLabel(Object e) => _t('오류: $e', 'Error: $e');
@@ -39,7 +48,7 @@ class ReservationStrings {
       _t('이 시간대는 예약이 제한되어 있습니다', 'Reservations are restricted for this time slot');
 
   // 예약 허브 화면 (세미나실/소모임 선택)
-  String get hubTitle => _t('예약', 'Reservation');
+  String get hubTitle => _t('편의기능', 'Amenities');
   String get hubSeminarRoomSubtitle =>
       _t('당일 시간대를 선택해 세미나실을 예약합니다', 'Reserve a seminar room by picking a time slot today');
   String get hubShareRoomSubtitle =>

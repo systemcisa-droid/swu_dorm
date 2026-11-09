@@ -113,12 +113,17 @@ class _ReservationScreenState extends State<ReservationScreen> {
       for (final doc in snap.docs) {
         final data = doc.data();
         data['_id'] = doc.id;
-        final roomId = data['roomId'] as String? ?? '';
-        final start = (data['startSlot'] as num?)?.toInt() ?? 0;
-        final end = (data['endSlot'] as num?)?.toInt() ?? start;
-        booked.putIfAbsent(roomId, () => {});
-        for (int i = start; i <= end; i++) {
-          booked[roomId]!.add(i);
+        final cancelled = data['cancelled'] == true;
+        // 취소된 예약은 슬롯을 비워줘야 하므로 booked 집계에서 제외한다.
+        // (단, 아래에서 내 예약으로는 계속 인식해 당일 재예약을 막는다.)
+        if (!cancelled) {
+          final roomId = data['roomId'] as String? ?? '';
+          final start = (data['startSlot'] as num?)?.toInt() ?? 0;
+          final end = (data['endSlot'] as num?)?.toInt() ?? start;
+          booked.putIfAbsent(roomId, () => {});
+          for (int i = start; i <= end; i++) {
+            booked[roomId]!.add(i);
+          }
         }
         if (data['userId'] == user?.uid) {
           myReservation = data;
@@ -311,10 +316,12 @@ class _ReservationScreenState extends State<ReservationScreen> {
     if (confirmed != true) return;
 
     try {
+      // 문서를 삭제하면 "오늘 이미 예약(취소 포함)했는지" 기록이 사라져 재예약을 막을 수
+      // 없으므로, 삭제 대신 cancelled 플래그만 세운다. 슬롯은 _load()에서 비워진다.
       await _firestore
           .collection('seminar_room_reservations')
           .doc(reservation['_id'] as String)
-          .delete();
+          .update({'cancelled': true, 'cancelledAt': Timestamp.now()});
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(s.cancelSuccess), backgroundColor: Colors.green),
@@ -394,6 +401,8 @@ class _ReservationScreenState extends State<ReservationScreen> {
                 _buildCautionItem(s.cautionMaxHours),
                 const SizedBox(height: 3),
                 _buildCautionItem(s.cautionNoProxy),
+                const SizedBox(height: 3),
+                _buildCautionItem(s.cautionOneTimeOnly),
                 if (_rooms.any((r) => r.id == _kBlockedRoomId)) ...[
                   const SizedBox(height: 3),
                   _buildCautionItem(s.shalom125MondayCaution),
@@ -484,10 +493,38 @@ class _ReservationScreenState extends State<ReservationScreen> {
 
   Widget _buildMyReservationCard(ReservationStrings s) {
     final reservation = _myReservation!;
+    final cancelled = reservation['cancelled'] == true;
     final roomLabel = reservation['roomLabel'] as String? ?? '';
     final start = (reservation['startSlot'] as num?)?.toInt() ?? 0;
     final end = (reservation['endSlot'] as num?)?.toInt() ?? start;
     final timeRange = '${_slotTimeLabel(start)} ~ ${_slotTimeLabel(end + 1)}';
+
+    if (cancelled) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.event_busy, color: Colors.grey.shade700, size: 20),
+                const SizedBox(width: 8),
+                Text(s.cancelledTodayTitle,
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade800)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(s.cancelledTodayNotice, style: TextStyle(color: Colors.grey.shade700, height: 1.4)),
+          ],
+        ),
+      );
+    }
 
     return Container(
       width: double.infinity,

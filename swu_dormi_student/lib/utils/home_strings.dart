@@ -44,7 +44,7 @@ class HomeStrings {
   String get menuCleaningMonthly => _t('월 검사/퇴사 검사', 'Monthly/Move-out Inspection');
   String get menuMoveOutCheck => _t('퇴사 확인', 'Move-out Confirmation');
   String get menuAttendance => _t('인원점검(화재대피훈련)', 'Attendance Check(Fire Evacuation Drill)');
-  String get menuReservation => _t('예약', 'Reservation');
+  String get menuReservation => _t('편의기능', 'Amenities');
   String get menuAlarm => _t('수업알람', 'Class Alarm');
   String get menuFloorChat =>
       _t('층장단톡(청검|인검 문의)', 'Floor Captain Chat (Cleaning/Attendance)');

@@ -58,9 +58,9 @@ class _WindowsNavigationShellState extends State<WindowsNavigationShell> with Wi
         selectedTileColor: WidgetStateProperty.all(Colors.purple.withValues(alpha: 0.1)),
       ),
       PaneItem(
-        icon: const Icon(FluentIcons.check_list),
-        title: const Text('선거'),
-        body: const WindowsCouncilElectionsTabScreen(),
+        icon: const Icon(FluentIcons.library),
+        title: const Text('회의록'),
+        body: const WindowsCouncilMinutesTabScreen(),
         selectedTileColor: WidgetStateProperty.all(Colors.purple.withValues(alpha: 0.1)),
       ),
     ]);

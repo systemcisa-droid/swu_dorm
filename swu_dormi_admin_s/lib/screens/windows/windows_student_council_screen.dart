@@ -2,12 +2,13 @@ import 'package:flutter/material.dart' hide Colors, FilledButton, IconButton, Ca
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:excel/excel.dart' hide Border;
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:swu_dormi_admin/services/auth_service.dart';
 import 'package:swu_dormi_admin/screens/windows/windows_council_notice_create_screen.dart';
+import 'package:swu_dormi_admin/screens/windows/windows_council_minutes_screen.dart';
 import 'package:swu_dormi_admin/services/storage_service.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 /// 사생회 공지 관리 화면 (사이드바 독립 메뉴).
 class WindowsCouncilNoticesTabScreen extends StatelessWidget {
@@ -29,50 +30,48 @@ class WindowsCouncilCampaignsTabScreen extends StatelessWidget {
   }
 }
 
-/// 사생회 선거 관리 화면 (사이드바 독립 메뉴).
-class WindowsCouncilElectionsTabScreen extends StatelessWidget {
-  const WindowsCouncilElectionsTabScreen({super.key});
+/// 사생회 회의록 관리 화면 (사이드바 독립 메뉴). 식단표와 같은 연도/월/주차
+/// 슬롯 구조를 쓰므로 공지/캠페인이 공유하는 목록+상세 패널 구조와는 별개다.
+class WindowsCouncilMinutesTabScreen extends StatelessWidget {
+  const WindowsCouncilMinutesTabScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const _CouncilSection(kind: _CouncilKind.election);
+    return const WindowsCouncilMinutesScreen();
   }
 }
 
 // ── 탭 종류별 설정 ────────────────────────────────────────────────
-enum _CouncilKind { notice, campaign, election }
+enum _CouncilKind { notice, campaign }
 
 extension _CouncilKindInfo on _CouncilKind {
   String get collection => switch (this) {
         _CouncilKind.notice => 'council_notices',
         _CouncilKind.campaign => 'council_campaigns',
-        _CouncilKind.election => 'council_elections',
       };
 
-  /// 목록 정렬 기준 필드. 공지는 작성일, 캠페인/선거는 시작일 기준이다.
+  /// 목록 정렬 기준 필드. 공지는 작성일, 캠페인은 시작일 기준이다.
   String get orderByField =>
       this == _CouncilKind.notice ? 'createdAt' : 'startDate';
 
   String get label => switch (this) {
         _CouncilKind.notice => '공지',
         _CouncilKind.campaign => '캠페인',
-        _CouncilKind.election => '선거',
       };
 
   IconData get icon => switch (this) {
         _CouncilKind.notice => FluentIcons.megaphone,
         _CouncilKind.campaign => FluentIcons.party_leader,
-        _CouncilKind.election => FluentIcons.check_list,
       };
 
   /// 기간(시작일/종료일) 입력이 필요한지 여부
-  bool get hasPeriod => this != _CouncilKind.notice;
-
-  /// 후보 목록 입력이 필요한지 여부
-  bool get hasCandidates => this == _CouncilKind.election;
+  bool get hasPeriod => this == _CouncilKind.campaign;
 
   /// 이미지·PDF 첨부 입력이 필요한지 여부 (캠페인 홍보물)
   bool get hasAttachments => this == _CouncilKind.campaign;
+
+  /// 공지와 동일한 전체 화면 작성 페이지(이미지·PDF 첨부, 고정)를 쓰는지 여부
+  bool get usesNoticeStyleEditor => this == _CouncilKind.notice;
 }
 
 // ── 목록 + 상세 패널 ──────────────────────────────────────────────
@@ -85,7 +84,7 @@ class _CouncilSection extends StatefulWidget {
 }
 
 class _CouncilSectionState extends State<_CouncilSection> {
-  final _dateFormat = DateFormat('yyyy.MM.dd');
+  final _dateFormat = DateFormat('yyyy.MM.dd HH:mm');
   _CouncilItem? _selected;
   String _searchQuery = '';
 
@@ -98,15 +97,17 @@ class _CouncilSectionState extends State<_CouncilSection> {
   }
 
   void _openDialog({_CouncilItem? editing}) {
-    // 공지는 기숙사 공지사항과 동일한 전체 화면 작성 페이지를 쓴다
-    // (이미지·PDF 첨부, 고정 공지, 알림 전송).
-    final Future<dynamic> future = widget.kind == _CouncilKind.notice
+    // 공지·회의록은 기숙사 공지사항과 동일한 전체 화면 작성 페이지를 쓴다
+    // (이미지·PDF 첨부, 고정).
+    final Future<dynamic> future = widget.kind.usesNoticeStyleEditor
         ? Navigator.push(
             context,
             FluentPageRoute(
               builder: (ctx) => WindowsCouncilNoticeCreateScreen(
                 noticeId: editing?.id,
                 notice: editing?.raw,
+                collection: widget.kind.collection,
+                kindLabel: widget.kind.label,
               ),
             ),
           )
@@ -246,6 +247,24 @@ class _CouncilSectionState extends State<_CouncilSection> {
           return Center(child: Text('오류: ${snapshot.error}'));
         }
         final all = snapshot.data ?? [];
+
+        // 학생이 조회·좋아요를 누를 때마다 숫자가 바뀌므로, 열어 둔 상세 화면의 숫자도 목록과 맞춰 갱신한다.
+        final selected = _selected;
+        if (selected != null &&
+            (widget.kind == _CouncilKind.notice ||
+                widget.kind == _CouncilKind.campaign)) {
+          final latest = all.where((n) => n.id == selected.id).firstOrNull;
+          if (latest != null &&
+              (latest.viewCount != selected.viewCount ||
+                  latest.likeCount != selected.likeCount)) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _selected?.id == latest.id) {
+                setState(() => _selected = latest);
+              }
+            });
+          }
+        }
+
         final filtered = _searchQuery.isEmpty
             ? all
             : all.where((n) => n.title.contains(_searchQuery)).toList();
@@ -298,24 +317,46 @@ class _CouncilSectionState extends State<_CouncilSection> {
                   _subtitleOf(n),
                   style: TextStyle(fontSize: 11, color: Colors.grey[100]),
                 ),
-                trailing: status == null
-                    ? null
-                    : Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: status.color.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          status.label,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: status.color,
+                trailing: widget.kind == _CouncilKind.notice
+                    // 일반 공지 목록과 같은 형태로 조회수를 보여준다.
+                    ? Text(
+                        '조회 ${n.viewCount}',
+                        style: TextStyle(fontSize: 11, color: Colors.grey[80]),
+                      )
+                    : status == null
+                        ? null
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: status.color.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  status.label,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: status.color,
+                                  ),
+                                ),
+                              ),
+                              // 캠페인은 학생 반응(조회수·좋아요)도 함께 보여준다.
+                              if (widget.kind == _CouncilKind.campaign) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  '조회 ${n.viewCount} · 좋아요 ${n.likeCount}',
+                                  style: TextStyle(
+                                      fontSize: 11, color: Colors.grey[80]),
+                                ),
+                              ],
+                            ],
                           ),
-                        ),
-                      ),
               ),
             );
           },
@@ -333,6 +374,37 @@ class _CouncilSectionState extends State<_CouncilSection> {
       if (parts.isNotEmpty) return parts.join(' ~ ');
     }
     return '${n.authorName}  ·  ${_dateFormat.format(n.createdAt)}';
+  }
+
+  void _showImageFullscreen(String url) {
+    showDialog(
+      context: context,
+      builder: (ctx) => ContentDialog(
+        constraints: const BoxConstraints(maxWidth: 1000, maxHeight: 800),
+        content: Stack(
+          children: [
+            Center(
+              child: Image.network(
+                url,
+                fit: BoxFit.contain,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return const Center(child: ProgressRing());
+                },
+              ),
+            ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IconButton(
+                icon: const Icon(FluentIcons.cancel, size: 16),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildDetail(_CouncilItem n) {
@@ -398,9 +470,32 @@ class _CouncilSectionState extends State<_CouncilSection> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            '${n.authorName}  ·  ${DateFormat('yyyy-MM-dd HH:mm').format(n.createdAt)}',
-            style: TextStyle(fontSize: 13, color: Colors.grey[100]),
+          Row(
+            children: [
+              Text(
+                '${n.authorName}  ·  ${DateFormat('yyyy-MM-dd HH:mm').format(n.createdAt)}',
+                style: TextStyle(fontSize: 13, color: Colors.grey[100]),
+              ),
+              if (widget.kind == _CouncilKind.notice ||
+                  widget.kind == _CouncilKind.campaign) ...[
+                const SizedBox(width: 16),
+                Icon(FluentIcons.view, size: 14, color: Colors.grey[100]),
+                const SizedBox(width: 6),
+                Text(
+                  '조회 ${n.viewCount}',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[100]),
+                ),
+              ],
+              if (widget.kind == _CouncilKind.campaign) ...[
+                const SizedBox(width: 16),
+                Icon(FluentIcons.heart, size: 14, color: Colors.grey[100]),
+                const SizedBox(width: 6),
+                Text(
+                  '좋아요 ${n.likeCount}',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[100]),
+                ),
+              ],
+            ],
           ),
           if (widget.kind.hasPeriod && n.startDate != null) ...[
             const SizedBox(height: 6),
@@ -413,111 +508,82 @@ class _CouncilSectionState extends State<_CouncilSection> {
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 16),
-          if (widget.kind.hasCandidates && n.candidates.isNotEmpty) ...[
-            _ElectionResults(electionId: n.id, candidates: n.candidates),
-            const SizedBox(height: 24),
-            _VoterRoll(electionId: n.id),
-            const SizedBox(height: 20),
-          ],
           if (n.content.isNotEmpty)
             Text(n.content,
                 style: const TextStyle(fontSize: 15, height: 1.7)),
-        ],
-      ),
-    );
-  }
-}
-
-// ── 투표 결과 집계 ────────────────────────────────────────────────
-/// 익명 표(ballots)를 후보별로 집계해 보여준다.
-/// 표에는 작성자 정보가 없으므로 누가 누구를 뽑았는지는 알 수 없다.
-class _ElectionResults extends StatelessWidget {
-  final String electionId;
-  final List<String> candidates;
-  const _ElectionResults({required this.electionId, required this.candidates});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('council_elections')
-          .doc(electionId)
-          .collection('ballots')
-          .snapshots(),
-      builder: (context, snapshot) {
-        final docs = snapshot.data?.docs ?? [];
-
-        // 후보별 득표수를 센다. 후보 목록에 없는 값은 무시한다.
-        final counts = <String, int>{for (final c in candidates) c: 0};
-        for (final d in docs) {
-          final data = (d.data() as Map<String, dynamic>?) ?? {};
-          final c = (data['candidate'] ?? '').toString();
-          if (counts.containsKey(c)) counts[c] = counts[c]! + 1;
-        }
-        final total = counts.values.fold<int>(0, (a, b) => a + b);
-        final maxCount =
-            counts.values.isEmpty ? 0 : counts.values.reduce((a, b) => a > b ? a : b);
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+          if (n.imageUrls.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            const Text(
+              '첨부 이미지',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Column(
+              children: n.imageUrls.map((url) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: GestureDetector(
+                    onTap: () => _showImageFullscreen(url),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        url,
+                        width: double.infinity,
+                        fit: BoxFit.contain,
+                        loadingBuilder: (context, child, progress) {
+                          if (progress == null) return child;
+                          return Container(
+                            height: 200,
+                            alignment: Alignment.center,
+                            child: const ProgressRing(),
+                          );
+                        },
+                        errorBuilder: (_, __, ___) => Container(
+                          height: 120,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[20],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(FluentIcons.photo2,
+                              size: 40, color: Colors.grey[80]),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+          if (n.pdfUrl != null) ...[
+            const SizedBox(height: 24),
             Row(
               children: [
-                const Text('투표 결과',
-                    style:
-                        TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                const SizedBox(width: 10),
-                Text('총 $total표',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[100])),
+                Icon(FluentIcons.document, size: 16, color: Colors.red),
+                const SizedBox(width: 8),
+                Text(
+                  n.pdfFileName ?? 'PDF 파일',
+                  style:
+                      const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
               ],
             ),
             const SizedBox(height: 12),
-            for (final c in candidates)
-              _buildBar(context, c, counts[c] ?? 0, total, maxCount),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildBar(BuildContext context, String candidate, int count, int total,
-      int maxCount) {
-    final ratio = total == 0 ? 0.0 : count / total;
-    // 최다 득표 후보를 강조한다 (동점이면 모두 강조).
-    final isLeading = count > 0 && count == maxCount;
-    final color = isLeading ? Colors.purple : Colors.grey;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(candidate,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight:
-                          isLeading ? FontWeight.bold : FontWeight.normal,
-                    )),
+            Container(
+              height: 600,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[30]!),
+                borderRadius: BorderRadius.circular(8),
               ),
-              Text(
-                '$count표  (${total == 0 ? 0 : (ratio * 100).round()}%)',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isLeading ? FontWeight.bold : FontWeight.normal,
-                  color: isLeading ? Colors.purple : Colors.grey[100],
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SfPdfViewer.network(
+                  n.pdfUrl!,
+                  key: ValueKey(n.pdfUrl),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 5),
-          ProgressBar(
-            value: ratio * 100,
-            activeColor: color,
-            backgroundColor: Colors.grey.withValues(alpha: 0.15),
-          ),
+            ),
+          ],
         ],
       ),
     );
@@ -540,13 +606,13 @@ class _CouncilItem {
   final DateTime createdAt;
   final DateTime? startDate;
   final DateTime? endDate;
-  final List<String> candidates;
-  /// 후보 이름 -> 유튜브 링크. 없는 후보는 키가 없을 수 있다.
-  final Map<String, String> candidateProfiles;
-  /// 후보 이름 -> 소개글
-  final Map<String, String> candidateIntros;
-  /// 후보 이름 -> 선거 포스터 PDF. 포스터가 없는 후보는 키가 없다.
-  final Map<String, _CandidatePdf> candidatePdfs;
+  /// 조회수. 공지·캠페인만 학생앱에서 계정당 1회씩 집계한다 (viewCount/viewedUsers).
+  final int viewCount;
+  /// 좋아요 수. 캠페인만 학생앱에서 집계한다 (likes/likeCount).
+  final int likeCount;
+  final List<String> imageUrls;
+  final String? pdfUrl;
+  final String? pdfFileName;
   /// 원본 문서 데이터 (공지 수정 화면에 그대로 넘긴다)
   final Map<String, dynamic> raw;
 
@@ -558,10 +624,11 @@ class _CouncilItem {
     required this.createdAt,
     this.startDate,
     this.endDate,
-    this.candidates = const [],
-    this.candidateProfiles = const {},
-    this.candidateIntros = const {},
-    this.candidatePdfs = const {},
+    this.viewCount = 0,
+    this.likeCount = 0,
+    this.imageUrls = const [],
+    this.pdfUrl,
+    this.pdfFileName,
     this.raw = const {},
   });
 
@@ -576,38 +643,22 @@ class _CouncilItem {
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       startDate: (data['startDate'] as Timestamp?)?.toDate(),
       endDate: (data['endDate'] as Timestamp?)?.toDate(),
-      candidates: (data['candidates'] as List?)
-              ?.map((c) => c.toString())
-              .where((c) => c.isNotEmpty)
+      viewCount: (data['viewCount'] as num?)?.toInt() ?? 0,
+      likeCount: (data['likeCount'] as num?)?.toInt() ?? 0,
+      imageUrls: (data['imageUrls'] as List?)
+              ?.map((e) => e.toString())
+              .where((e) => e.isNotEmpty)
               .toList() ??
           const [],
-      candidateProfiles:
-          (data['candidateProfiles'] as Map?)?.map(
-                (k, v) => MapEntry(k.toString(), v.toString()),
-              ) ??
-              const {},
-      candidateIntros: (data['candidateIntros'] as Map?)?.map(
-            (k, v) => MapEntry(k.toString(), v.toString()),
-          ) ??
-          const {},
-      candidatePdfs: (data['candidatePdfs'] as Map?)?.map(
-            (k, v) {
-              final m = (v as Map?) ?? const {};
-              return MapEntry(
-                k.toString(),
-                _CandidatePdf(
-                  url: (m['url'] ?? '').toString(),
-                  name: (m['name'] ?? '').toString(),
-                ),
-              );
-            },
-          ) ??
-          const {},
+      pdfUrl: (data['pdfUrl'] as String?)?.isNotEmpty == true
+          ? data['pdfUrl'] as String
+          : null,
+      pdfFileName: data['pdfFileName'] as String?,
       raw: data,
     );
   }
 
-  /// 기간을 가진 항목(캠페인/선거)만 진행 상태를 갖는다.
+  /// 기간을 가진 항목(캠페인)만 진행 상태를 갖는다.
   /// 학생앱의 색상·판정 기준과 동일하게 맞춘다.
   _Status? statusOf(_CouncilKind kind) {
     if (!kind.hasPeriod) return null;
@@ -615,15 +666,8 @@ class _CouncilItem {
     if (startDate != null && now.isBefore(startDate!)) {
       return const _Status('예정', Color(0xFFFF9800));
     }
-    if (endDate != null) {
-      final e = endDate!;
-      // 선거는 종료일 오후 8시 마감, 캠페인은 종료일 자정까지로 본다.
-      final close = kind == _CouncilKind.election
-          ? DateTime(e.year, e.month, e.day, 20, 0, 0)
-          : DateTime(e.year, e.month, e.day, 23, 59, 59);
-      if (now.isAfter(close)) {
-        return const _Status('종료', Color(0xFF757575));
-      }
+    if (endDate != null && now.isAfter(endDate!)) {
+      return const _Status('종료', Color(0xFF757575));
     }
     return const _Status('진행중', Color(0xFF009688));
   }
@@ -642,8 +686,6 @@ class _CouncilDialog extends StatefulWidget {
 class _CouncilDialogState extends State<_CouncilDialog> {
   final _titleCtrl = TextEditingController();
   final _contentCtrl = TextEditingController();
-  /// 후보 입력 행 (이름 / 유튜브 링크 / 포스터 PDF)
-  final List<_CandidateRow> _candidateRows = [];
   DateTime? _startDate;
   DateTime? _endDate;
   bool _isLoading = false;
@@ -665,15 +707,6 @@ class _CouncilDialogState extends State<_CouncilDialog> {
     if (e != null) {
       _titleCtrl.text = e.title;
       _contentCtrl.text = e.content;
-      for (final c in e.candidates) {
-        _candidateRows.add(_CandidateRow(
-          name: c,
-          intro: e.candidateIntros[c] ?? '',
-          videoUrl: e.candidateProfiles[c] ?? '',
-          pdfUrl: e.candidatePdfs[c]?.url ?? '',
-          pdfName: e.candidatePdfs[c]?.name ?? '',
-        ));
-      }
       _startDate = e.startDate;
       _endDate = e.endDate;
       _existingImageUrls = (e.raw['imageUrls'] as List?)
@@ -687,48 +720,53 @@ class _CouncilDialogState extends State<_CouncilDialog> {
         _existingPdfFileName = (e.raw['pdfFileName'] ?? '').toString();
       }
     }
-    // 선거는 입력할 행이 최소 하나는 보이도록 한다.
-    if (widget.kind.hasCandidates && _candidateRows.isEmpty) {
-      _addCandidateRow();
-    }
   }
 
-  /// 투표권이 있는 학생 수를 센다 (선거인 명부와 동일한 기준).
-  Future<int> _countEligibleVoters() async {
-    final snap = await FirebaseFirestore.instance
-        .collection('users')
-        .where('role', isEqualTo: 'student')
-        .get();
-    var count = 0;
-    for (final d in snap.docs) {
-      final data = (d.data() as Map<String, dynamic>?) ?? {};
-      final dorm = (data['dormBuilding'] ?? '').toString();
-      final room = (data['roomNumber'] ?? '').toString();
-      final status = (data['residentStatus'] ?? '').toString();
-      if (dorm.isEmpty || dorm.contains('방학')) continue;
-      if (_kMoveOutStatuses.contains(status)) continue;
-      if (room.isEmpty || room == '000') continue;
-      count++;
-    }
-    return count;
-  }
-
-  /// 후보 한 명의 포스터 PDF 를 고른다.
-  Future<void> _pickPdf(_CandidateRow row) async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
+  /// 시(10~23시)와 분(15분 단위)을 ComboBox로 고르게 한다.
+  /// fluent_ui TimePicker의 끝없이 도는 휠 대신 끝이 있는 목록을 쓰고,
+  /// 09시 이전 시간은 선택지에서 아예 제외한다.
+  Widget _buildTimeCombo(DateTime? value, ValueChanged<DateTime> onPick) {
+    return Row(
+      children: [
+        Expanded(
+          child: ComboBox<int>(
+            value: value?.hour,
+            placeholder: const Text('시'),
+            isExpanded: true,
+            items: [
+              for (int h = 10; h <= 23; h++)
+                ComboBoxItem(value: h, child: Text('$h시')),
+            ],
+            onChanged: (h) {
+              if (h == null) return;
+              final base = value ?? DateTime.now();
+              onPick(DateTime(
+                  base.year, base.month, base.day, h, value?.minute ?? 0));
+            },
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: ComboBox<int>(
+            value: value?.minute,
+            placeholder: const Text('분'),
+            isExpanded: true,
+            items: const [
+              ComboBoxItem(value: 0, child: Text('00분')),
+              ComboBoxItem(value: 15, child: Text('15분')),
+              ComboBoxItem(value: 30, child: Text('30분')),
+              ComboBoxItem(value: 45, child: Text('45분')),
+            ],
+            onChanged: (m) {
+              if (m == null) return;
+              final base = value ?? DateTime.now();
+              onPick(DateTime(
+                  base.year, base.month, base.day, value?.hour ?? 10, m));
+            },
+          ),
+        ),
+      ],
     );
-    final path = result?.files.single.path;
-    if (path == null) return;
-    setState(() {
-      row.pendingPdf = File(path);
-      row.pdfName = result!.files.single.name;
-    });
-  }
-
-  void _addCandidateRow() {
-    _candidateRows.add(_CandidateRow());
   }
 
   /// 캠페인 홍보 이미지를 여러 장 고른다.
@@ -763,9 +801,6 @@ class _CouncilDialogState extends State<_CouncilDialog> {
   void dispose() {
     _titleCtrl.dispose();
     _contentCtrl.dispose();
-    for (final row in _candidateRows) {
-      row.dispose();
-    }
     super.dispose();
   }
 
@@ -799,6 +834,20 @@ class _CouncilDialogState extends State<_CouncilDialog> {
               ));
       return;
     }
+    if (widget.kind.hasPeriod &&
+        _endDate != null &&
+        _endDate!.hour == 0 &&
+        _endDate!.minute == 0) {
+      displayInfoBar(context,
+          builder: (ctx, close) => InfoBar(
+                title: const Text('입력 오류'),
+                content: const Text('종료일의 마감 시각을 선택해주세요.'),
+                severity: InfoBarSeverity.warning,
+                action: IconButton(
+                    icon: const Icon(FluentIcons.clear), onPressed: close),
+              ));
+      return;
+    }
 
     setState(() => _isLoading = true);
     try {
@@ -815,42 +864,6 @@ class _CouncilDialogState extends State<_CouncilDialog> {
             _startDate == null ? null : Timestamp.fromDate(_startDate!);
         data['endDate'] =
             _endDate == null ? null : Timestamp.fromDate(_endDate!);
-      }
-      if (widget.kind.hasCandidates) {
-        final names = <String>[];
-        final profiles = <String, String>{};
-        final intros = <String, String>{};
-        final pdfs = <String, dynamic>{};
-        for (final row in _candidateRows) {
-          final name = row.nameCtrl.text.trim();
-          if (name.isEmpty) continue;
-          names.add(name);
-
-          final video = row.videoCtrl.text.trim();
-          if (video.isNotEmpty) profiles[name] = video;
-
-          final intro = row.introCtrl.text.trim();
-          if (intro.isNotEmpty) intros[name] = intro;
-
-          // 새로 고른 포스터가 있으면 업로드해 URL 을 교체한다.
-          if (row.pendingPdf != null) {
-            final fileName = 'council_${DateTime.now().millisecondsSinceEpoch}'
-                '_${names.length}_${row.pdfName}';
-            row.pdfUrl =
-                await _storage.uploadNoticePdf(row.pendingPdf!, fileName);
-            row.pendingPdf = null;
-          }
-          if (row.pdfUrl.isNotEmpty) {
-            pdfs[name] = {'url': row.pdfUrl, 'name': row.pdfName};
-          }
-        }
-        data['candidates'] = names;
-        data['candidateProfiles'] = profiles;
-        data['candidateIntros'] = intros;
-        data['candidatePdfs'] = pdfs;
-
-        // 학생앱 투표율 표시용 선거인 수. 명부와 같은 기준으로 센다.
-        data['eligibleCount'] = await _countEligibleVoters();
       }
       if (widget.kind.hasAttachments) {
         final docPrefix = 'council_campaign_${DateTime.now().millisecondsSinceEpoch}';
@@ -906,94 +919,6 @@ class _CouncilDialogState extends State<_CouncilDialog> {
                     icon: const Icon(FluentIcons.clear), onPressed: close),
               ));
     }
-  }
-
-  /// 후보 한 명의 입력 행 (이름 / 유튜브 링크 / 포스터 PDF)
-  Widget _buildCandidateRow(int i) {
-    final row = _candidateRows[i];
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 120,
-                child: TextBox(
-                  controller: row.nameCtrl,
-                  placeholder: '이름',
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextBox(
-                  controller: row.videoCtrl,
-                  placeholder: '유튜브 링크 (연설·공약 영상)',
-                ),
-              ),
-              const SizedBox(width: 4),
-              IconButton(
-                icon: const Icon(FluentIcons.delete, size: 14),
-                onPressed: _candidateRows.length <= 1
-                    ? null
-                    : () => setState(() {
-                          _candidateRows.removeAt(i).dispose();
-                        }),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          TextBox(
-            controller: row.introCtrl,
-            placeholder: '후보 소개 (선택)',
-            maxLines: 4,
-            minLines: 2,
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Button(
-                onPressed: () => _pickPdf(row),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(FluentIcons.pdf, size: 14),
-                    SizedBox(width: 6),
-                    Text('선거 포스터'),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  row.pdfName.isEmpty ? '선택된 파일 없음' : row.pdfName,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: row.pdfName.isEmpty ? Colors.grey[100] : null,
-                  ),
-                ),
-              ),
-              if (row.pdfName.isNotEmpty)
-                IconButton(
-                  icon: const Icon(FluentIcons.clear, size: 12),
-                  onPressed: () => setState(() {
-                    row.pendingPdf = null;
-                    row.pdfUrl = '';
-                    row.pdfName = '';
-                  }),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
   }
 
   /// 캠페인 홍보물 첨부 섹션 (이미지 여러 장 + PDF 1개)
@@ -1159,9 +1084,28 @@ class _CouncilDialogState extends State<_CouncilDialog> {
                   Expanded(
                     child: InfoLabel(
                       label: '시작일',
-                      child: DatePicker(
-                        selected: _startDate,
-                        onChanged: (d) => setState(() => _startDate = d),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: DatePicker(
+                              selected: _startDate,
+                              onChanged: (d) => setState(() {
+                                final t = _startDate;
+                                _startDate = DateTime(d.year, d.month, d.day,
+                                    t?.hour ?? 10, t?.minute ?? 0);
+                              }),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 4,
+                            child: _buildTimeCombo(
+                              _startDate,
+                              (dt) => setState(() => _startDate = dt),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -1169,38 +1113,37 @@ class _CouncilDialogState extends State<_CouncilDialog> {
                   Expanded(
                     child: InfoLabel(
                       label: '종료일',
-                      child: DatePicker(
-                        selected: _endDate,
-                        onChanged: (d) => setState(() => _endDate = d),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: DatePicker(
+                              selected: _endDate,
+                              onChanged: (d) => setState(() {
+                                final t = _endDate;
+                                // 마감 시각은 직접 선택한 값만 쓴다. 날짜만 바뀐
+                                // 경우 기존에 고른 시간이 있으면 유지하고, 없으면
+                                // 00:00으로 두어 아래 시간 선택에서 직접 고르게 한다.
+                                _endDate = DateTime(
+                                    d.year, d.month, d.day, t?.hour ?? 0, t?.minute ?? 0);
+                              }),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 4,
+                            child: _buildTimeCombo(
+                              _endDate,
+                              (dt) => setState(() => _endDate = dt),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
-            ],
-            if (kind.hasCandidates) ...[
-              InfoLabel(
-                label: '후보',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (int i = 0; i < _candidateRows.length; i++)
-                      _buildCandidateRow(i),
-                    Button(
-                      onPressed: () => setState(_addCandidateRow),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(FluentIcons.add, size: 12),
-                          SizedBox(width: 6),
-                          Text('후보 추가'),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
             if (kind.hasAttachments) ...[
               InfoLabel(
@@ -1238,484 +1181,3 @@ class _CouncilDialogState extends State<_CouncilDialog> {
   }
 }
 
-// ── 후보 입력 행 ──────────────────────────────────────────────────
-/// 다이얼로그에서 후보 한 명의 입력 상태(이름/영상/포스터)를 담는다.
-class _CandidateRow {
-  final TextEditingController nameCtrl;
-  final TextEditingController introCtrl;
-  final TextEditingController videoCtrl;
-
-  /// 아직 업로드하지 않은 새 PDF. 저장 시 업로드 후 null 로 되돌린다.
-  File? pendingPdf;
-  String pdfUrl;
-  String pdfName;
-
-  _CandidateRow({
-    String name = '',
-    String intro = '',
-    String videoUrl = '',
-    this.pdfUrl = '',
-    this.pdfName = '',
-  })  : nameCtrl = TextEditingController(text: name),
-        introCtrl = TextEditingController(text: intro),
-        videoCtrl = TextEditingController(text: videoUrl);
-
-  void dispose() {
-    nameCtrl.dispose();
-    introCtrl.dispose();
-    videoCtrl.dispose();
-  }
-}
-
-/// 후보별 선거 포스터 PDF 정보
-class _CandidatePdf {
-  final String url;
-  final String name;
-  const _CandidatePdf({required this.url, required this.name});
-}
-
-// ── 선거인 명부 ───────────────────────────────────────────────────
-/// 퇴사 계열 재실상태. 이 상태의 학생은 투표권이 없다.
-/// ('퇴사'는 세분화 전 레거시 데이터에 남아있을 수 있어 함께 인식한다)
-const _kMoveOutStatuses = {
-  '퇴사',
-  '만기퇴사',
-  '자진퇴사',
-  '강제퇴사',
-  '영구퇴사',
-};
-
-/// 학생 전체를 명부로 보여주고, 각자의 투표 여부와 투표 시각을 표시한다.
-///
-/// voters 문서에는 선택한 후보가 담겨 있지 않으므로,
-/// 명부를 봐도 누가 누구를 뽑았는지는 알 수 없다(비밀투표 유지).
-class _VoterRoll extends StatefulWidget {
-  final String electionId;
-  const _VoterRoll({required this.electionId});
-
-  @override
-  State<_VoterRoll> createState() => _VoterRollState();
-}
-
-class _VoterRollState extends State<_VoterRoll> {
-  final _dateFormat = DateFormat('yyyy.MM.dd HH:mm');
-
-  /// uid -> 학생 정보
-  Map<String, _Voter> _students = {};
-  bool _isLoading = true;
-  String _search = '';
-
-  /// 0 = 전체, 1 = 투표함, 2 = 미투표
-  int _filter = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadStudents();
-  }
-
-  Future<void> _loadStudents() async {
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .where('role', isEqualTo: 'student')
-          .get();
-      final map = <String, _Voter>{};
-      for (final d in snap.docs) {
-        final data = (d.data() as Map<String, dynamic>?) ?? {};
-        final dorm = (data['dormBuilding'] ?? '').toString();
-        final room = (data['roomNumber'] ?? '').toString();
-        final status = (data['residentStatus'] ?? '').toString();
-
-        // 투표권은 학기중 사생에게만 있다.
-        // 방학 구역, 퇴사자, 호실 미배정(000호)은 명부에서 제외한다.
-        if (dorm.isEmpty || dorm.contains('방학')) continue;
-        if (_kMoveOutStatuses.contains(status)) continue;
-        if (room.isEmpty || room == '000') continue;
-
-        map[d.id] = _Voter(
-          uid: d.id,
-          name: (data['name'] ?? '').toString(),
-          studentId: (data['studentId'] ?? '').toString(),
-          dormBuilding: dorm,
-          roomNumber: room,
-        );
-      }
-      if (!mounted) return;
-      setState(() {
-        _students = map;
-        _isLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _exportToExcel(List<_Voter> rows) async {
-    try {
-      final excel = Excel.createExcel();
-      final sheet = excel[excel.getDefaultSheet()!];
-      sheet.appendRow([
-        TextCellValue('학번'),
-        TextCellValue('성명'),
-        TextCellValue('호실'),
-        TextCellValue('투표 여부'),
-        TextCellValue('투표 시각'),
-      ]);
-      for (final v in rows) {
-        sheet.appendRow([
-          TextCellValue(v.studentId),
-          TextCellValue(v.name),
-          TextCellValue(v.room),
-          TextCellValue(v.votedAt != null ? '투표함' : '미투표'),
-          TextCellValue(
-              v.votedAt != null ? _dateFormat.format(v.votedAt!) : ''),
-        ]);
-      }
-      final bytes = excel.encode();
-      if (bytes == null) throw Exception('엑셀 파일 생성 실패');
-
-      final savePath = await FilePicker.platform.saveFile(
-        dialogTitle: '선거인 명부 저장',
-        fileName: '선거인명부.xlsx',
-        allowedExtensions: ['xlsx'],
-        type: FileType.custom,
-      );
-      if (savePath == null) return;
-      await File(savePath).writeAsBytes(bytes);
-
-      if (!mounted) return;
-      displayInfoBar(context,
-          builder: (ctx, close) => InfoBar(
-                title: const Text('저장 완료'),
-                severity: InfoBarSeverity.success,
-                action: IconButton(
-                    icon: const Icon(FluentIcons.clear), onPressed: close),
-              ));
-    } catch (e) {
-      if (!mounted) return;
-      displayInfoBar(context,
-          builder: (ctx, close) => InfoBar(
-                title: const Text('저장 실패'),
-                content: Text('$e'),
-                severity: InfoBarSeverity.error,
-                action: IconButton(
-                    icon: const Icon(FluentIcons.clear), onPressed: close),
-              ));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(
-          child: Padding(padding: EdgeInsets.all(20), child: ProgressRing()));
-    }
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('council_elections')
-          .doc(widget.electionId)
-          .collection('voters')
-          .snapshots(),
-      builder: (context, snapshot) {
-        // uid -> 투표 시각
-        final votedAt = <String, DateTime?>{};
-        for (final d in snapshot.data?.docs ?? []) {
-          final data = (d.data() as Map<String, dynamic>?) ?? {};
-          votedAt[d.id] = (data['votedAt'] as Timestamp?)?.toDate();
-        }
-
-        // 명부 = 학생 전체 + 투표 정보
-        final all = _students.values
-            .map((v) => v.copyWith(
-                  hasVoted: votedAt.containsKey(v.uid),
-                  votedAt: votedAt[v.uid],
-                ))
-            .toList()
-          // 건물 -> 호실 -> 이름 순으로 정렬한다.
-          ..sort((a, b) {
-            final byBuilding = a.buildingRank.compareTo(b.buildingRank);
-            if (byBuilding != 0) return byBuilding;
-            final byRoom = a.roomSortKey.compareTo(b.roomSortKey);
-            if (byRoom != 0) return byRoom;
-            return a.name.compareTo(b.name);
-          });
-
-        final votedCount = all.where((v) => v.hasVoted).length;
-        final rate = all.isEmpty ? 0.0 : votedCount / all.length;
-
-        // 필터 + 검색 적용
-        var rows = switch (_filter) {
-          1 => all.where((v) => v.hasVoted).toList(),
-          2 => all.where((v) => !v.hasVoted).toList(),
-          _ => all,
-        };
-        if (_search.isNotEmpty) {
-          rows = rows
-              .where((v) =>
-                  v.name.contains(_search) ||
-                  v.studentId.contains(_search) ||
-                  v.room.contains(_search))
-              .toList();
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text('선거인 명부',
-                    style:
-                        TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                const SizedBox(width: 6),
-                Tooltip(
-                  message: '학기중 사생만 투표권이 있습니다.\n'
-                      '방학 구역·퇴사자·호실 미배정은 제외됩니다.',
-                  child: Icon(FluentIcons.info,
-                      size: 12, color: Colors.grey[100]),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  '$votedCount / ${all.length}명  (투표율 ${(rate * 100).toStringAsFixed(1)}%)',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[100]),
-                ),
-                const Spacer(),
-                Button(
-                  onPressed: rows.isEmpty ? null : () => _exportToExcel(rows),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(FluentIcons.excel_document, size: 13),
-                      SizedBox(width: 6),
-                      Text('엑셀 다운로드', style: TextStyle(fontSize: 12)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _buildFilterChip('전체', 0, all.length),
-                const SizedBox(width: 6),
-                _buildFilterChip('투표함', 1, votedCount),
-                const SizedBox(width: 6),
-                _buildFilterChip('미투표', 2, all.length - votedCount),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 220,
-                  child: TextBox(
-                    placeholder: '이름, 학번, 호실 검색',
-                    prefix: const Padding(
-                      padding: EdgeInsets.only(left: 8),
-                      child: Icon(FluentIcons.search, size: 13),
-                    ),
-                    onChanged: (v) => setState(() => _search = v.trim()),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            // 표 머리글
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey.withValues(alpha: 0.08),
-                borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(6)),
-              ),
-              child: Row(
-                children: const [
-                  SizedBox(
-                      width: 40,
-                      child: Text('번호',
-                          style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.bold))),
-                  SizedBox(
-                      width: 110,
-                      child: Text('학번',
-                          style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.bold))),
-                  SizedBox(
-                      width: 90,
-                      child: Text('성명',
-                          style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.bold))),
-                  Expanded(
-                      child: Text('호실',
-                          style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.bold))),
-                  SizedBox(
-                      width: 70,
-                      child: Text('투표 여부',
-                          style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.bold))),
-                  SizedBox(
-                      width: 130,
-                      child: Text('투표 시각',
-                          style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.bold))),
-                ],
-              ),
-            ),
-            if (rows.isEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 30),
-                alignment: Alignment.center,
-                child: Text('해당하는 학생이 없습니다.',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[100])),
-              )
-            else
-              // 상세 패널이 스크롤되므로 명부는 높이를 제한해 자체 스크롤한다.
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 420),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: rows.length,
-                  itemBuilder: (context, i) => _buildRow(rows[i], i),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildFilterChip(String label, int index, int count) {
-    final isSelected = _filter == index;
-    final accent = FluentTheme.of(context).accentColor;
-    return GestureDetector(
-      onTap: () => setState(() => _filter = index),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: isSelected ? accent.withValues(alpha: 0.12) : null,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: isSelected
-                ? accent
-                : FluentTheme.of(context).resources.dividerStrokeColorDefault,
-          ),
-        ),
-        child: Text(
-          '$label $count',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            color: isSelected ? accent : null,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRow(_Voter v, int i) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: i.isOdd ? Colors.grey.withValues(alpha: 0.03) : null,
-        border: Border(
-          bottom: BorderSide(
-            color: FluentTheme.of(context).resources.dividerStrokeColorDefault,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-              width: 40,
-              child: Text('${i + 1}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[100]))),
-          SizedBox(
-              width: 110,
-              child: Text(v.studentId, style: const TextStyle(fontSize: 12))),
-          SizedBox(
-              width: 90,
-              child: Text(v.name, style: const TextStyle(fontSize: 12))),
-          Expanded(
-              child: Text(v.room,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[100]))),
-          SizedBox(
-            width: 70,
-            child: v.hasVoted
-                ? Row(
-                    children: [
-                      Icon(FluentIcons.completed,
-                          size: 12, color: Colors.green),
-                      const SizedBox(width: 4),
-                      Text('투표함',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.green,
-                              fontWeight: FontWeight.w600)),
-                    ],
-                  )
-                : Text('미투표',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[100])),
-          ),
-          SizedBox(
-            width: 130,
-            child: Text(
-              v.votedAt != null ? _dateFormat.format(v.votedAt!) : '-',
-              style: TextStyle(fontSize: 12, color: Colors.grey[100]),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 선거인 명부 한 줄
-class _Voter {
-  final String uid;
-  final String name;
-  final String studentId;
-  final String dormBuilding;
-  final String roomNumber;
-  final bool hasVoted;
-  final DateTime? votedAt;
-
-  const _Voter({
-    required this.uid,
-    required this.name,
-    required this.studentId,
-    required this.dormBuilding,
-    required this.roomNumber,
-    this.hasVoted = false,
-    this.votedAt,
-  });
-
-  String get room =>
-      [dormBuilding, if (roomNumber.isNotEmpty) '$roomNumber호']
-          .where((e) => e.isNotEmpty)
-          .join(' ');
-
-  /// 건물 정렬 순서 (샬롬하우스 -> 국제생활관 -> 바롬인성교육관 -> 기타)
-  int get buildingRank {
-    if (dormBuilding.startsWith('샬롬하우스')) return 0;
-    if (dormBuilding.startsWith('국제생활관')) return 1;
-    if (dormBuilding.startsWith('바롬인성교육관')) return 2;
-    return 3;
-  }
-
-  /// 호실 정렬 키. 숫자로 비교해 '109호'가 '1001-B호'보다 앞에 오도록 한다.
-  /// 숫자로 못 읽으면 맨 뒤로 보낸다.
-  int get roomSortKey {
-    final digits = RegExp(r'^\d+').firstMatch(roomNumber)?.group(0);
-    return int.tryParse(digits ?? '') ?? 999999;
-  }
-
-  _Voter copyWith({bool? hasVoted, DateTime? votedAt}) => _Voter(
-        uid: uid,
-        name: name,
-        studentId: studentId,
-        dormBuilding: dormBuilding,
-        roomNumber: roomNumber,
-        hasVoted: hasVoted ?? this.hasVoted,
-        votedAt: votedAt ?? this.votedAt,
-      );
-}

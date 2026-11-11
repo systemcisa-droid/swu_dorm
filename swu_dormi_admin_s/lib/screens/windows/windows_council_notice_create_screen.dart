@@ -6,16 +6,25 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:swu_dormi_admin/services/storage_service.dart';
 import 'package:swu_dormi_admin/services/auth_service.dart';
 
-/// 사생회 공지 작성/수정 화면.
+/// 사생회 공지 작성/수정 화면. 회의록도 같은 구조(제목/내용/이미지·PDF 첨부/고정)라
+/// collection·kindLabel만 바꿔 이 화면을 그대로 재사용한다.
 /// 기숙사 공지사항 작성 화면([WindowsNoticeCreateScreen])과 동일한 UI·기능을 쓰되,
-/// 사생회 공지는 학생 대상 푸시 알림을 보내지 않는다 (캠페인/선거와 동일한 정책).
-/// (이미지 여러 장 / PDF 첨부 / 고정 공지)
+/// 사생회 공지·회의록은 학생 대상 푸시 알림을 보내지 않는다 (캠페인과 동일한 정책).
+/// (이미지 여러 장 / PDF 첨부 / 고정)
 class WindowsCouncilNoticeCreateScreen extends StatefulWidget {
-  /// null 이면 새 공지, 값이 있으면 수정 모드
+  /// null 이면 새 글, 값이 있으면 수정 모드
   final String? noticeId;
   final Map<String, dynamic>? notice;
+  final String collection;
+  final String kindLabel;
 
-  const WindowsCouncilNoticeCreateScreen({super.key, this.noticeId, this.notice});
+  const WindowsCouncilNoticeCreateScreen({
+    super.key,
+    this.noticeId,
+    this.notice,
+    this.collection = 'council_notices',
+    this.kindLabel = '공지',
+  });
 
   @override
   State<WindowsCouncilNoticeCreateScreen> createState() =>
@@ -138,7 +147,7 @@ class _WindowsCouncilNoticeCreateScreenState
 
     try {
       final storageService = StorageService();
-      final col = FirebaseFirestore.instance.collection('council_notices');
+      final col = FirebaseFirestore.instance.collection(widget.collection);
       final docId = _isEditMode
           ? widget.noticeId!
           : DateTime.now().millisecondsSinceEpoch.toString();
@@ -191,7 +200,7 @@ class _WindowsCouncilNoticeCreateScreenState
           'authorName': userName,
           'createdAt': FieldValue.serverTimestamp(),
         });
-        // 사생회 공지는 캠페인/선거와 마찬가지로 학생 대상 알림을 보내지 않는다.
+        // 사생회 공지·회의록은 캠페인과 마찬가지로 학생 대상 알림을 보내지 않는다.
       }
 
       if (mounted) {
@@ -199,7 +208,9 @@ class _WindowsCouncilNoticeCreateScreenState
           context,
           builder: (context, close) => InfoBar(
             title: const Text('성공'),
-            content: Text(_isEditMode ? '사생회 공지가 수정되었습니다' : '사생회 공지가 등록되었습니다'),
+            content: Text(_isEditMode
+                ? '사생회 ${widget.kindLabel} 수정이 완료되었습니다'
+                : '사생회 ${widget.kindLabel} 등록이 완료되었습니다'),
             action: IconButton(
                 icon: const Icon(FluentIcons.clear), onPressed: close),
             severity: InfoBarSeverity.success,
@@ -220,7 +231,9 @@ class _WindowsCouncilNoticeCreateScreenState
   Widget build(BuildContext context) {
     return ScaffoldPage(
       header: PageHeader(
-        title: Text(_isEditMode ? '사생회 공지 수정' : '사생회 공지 작성'),
+        title: Text(_isEditMode
+            ? '사생회 ${widget.kindLabel} 수정'
+            : '사생회 ${widget.kindLabel} 작성'),
         commandBar: CommandBar(
           mainAxisAlignment: MainAxisAlignment.end,
           primaryItems: [
@@ -253,7 +266,7 @@ class _WindowsCouncilNoticeCreateScreenState
                       label: '제목 *',
                       child: TextBox(
                         controller: _titleController,
-                        placeholder: '공지 제목을 입력하세요',
+                        placeholder: '${widget.kindLabel} 제목을 입력하세요',
                         maxLines: 1,
                         enabled: !_isLoading,
                       ),
@@ -265,14 +278,14 @@ class _WindowsCouncilNoticeCreateScreenState
                       label: '내용 *',
                       child: TextBox(
                         controller: _contentController,
-                        placeholder: '공지 내용을 입력하세요',
+                        placeholder: '${widget.kindLabel} 내용을 입력하세요',
                         maxLines: 15,
                         enabled: !_isLoading,
                       ),
                     ),
                     const SizedBox(height: 20),
 
-                    // 고정 공지
+                    // 고정
                     Row(
                       children: [
                         Checkbox(
@@ -283,10 +296,10 @@ class _WindowsCouncilNoticeCreateScreenState
                                   setState(() => _isPinned = value ?? false),
                         ),
                         const SizedBox(width: 8),
-                        const Text('고정 공지사항으로 설정'),
+                        const Text('목록 상단에 고정'),
                         const SizedBox(width: 8),
                         Tooltip(
-                          message: '고정 공지사항은 목록 상단에 고정되어 표시됩니다',
+                          message: '고정하면 목록 상단에 표시됩니다',
                           child: Icon(FluentIcons.info,
                               size: 14, color: Colors.grey[100]),
                         ),
